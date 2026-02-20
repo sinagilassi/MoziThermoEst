@@ -1,6 +1,11 @@
 import * as mozicuc from "mozicuc";
 import type { Pressure, Temperature } from "mozithermodb-settings";
-import type { PressureUnit, TemperatureUnit } from "../types/antoine";
+import type {
+  PressureUnit,
+  RegressionPressureUnit,
+  RegressionTemperatureUnit,
+  TemperatureUnit,
+} from "../types/antoine";
 
 const convertFromToFn: (value: number, fromUnit: string, toUnit: string) => number = (() => {
   const mod = mozicuc as unknown as {
@@ -61,7 +66,7 @@ export function fromPa(value: number, unit: PressureUnit): number {
  */
 export function normalizeTemperatures(temperatures: Temperature[]): number[] | null {
   try {
-    return temperatures.map((item) => convertFromToFn(item.value, item.unit, "K"));
+    return normalizeTemperaturesToUnit(temperatures, "K");
   } catch {
     return null;
   }
@@ -75,8 +80,56 @@ export function normalizeTemperatures(temperatures: Temperature[]): number[] | n
  */
 export function normalizePressures(pressures: Pressure[]): number[] | null {
   try {
-    return pressures.map((item) => convertFromToFn(item.value, item.unit, "Pa"));
+    return normalizePressuresToUnit(pressures, "Pa");
   } catch {
     return null;
   }
+}
+
+type UnitValue = { value: number; unit: string };
+
+/**
+ * Normalize an array of typed values into a target unit.
+ * Throws on empty input, invalid items, or conversion failure.
+ */
+export function normalizeUnit<T extends UnitValue>(
+  values: T[],
+  targetUnit: string,
+  label: string,
+  allowedUnits?: string[],
+): number[] {
+  if (!Array.isArray(values) || values.length === 0) {
+    throw new Error(`${label} must be a non-empty array.`);
+  }
+  const out: number[] = [];
+  for (const item of values) {
+    if (!item || !Number.isFinite(item.value) || typeof item.unit !== "string") {
+      throw new Error(`${label} entries must include finite value and unit.`);
+    }
+    if (allowedUnits && !allowedUnits.includes(item.unit)) {
+      throw new Error(`${label} unit '${item.unit}' is not supported.`);
+    }
+    out.push(convertFromToFn(item.value, item.unit, targetUnit));
+  }
+  return out;
+}
+
+/**
+ * Normalize typed temperature objects into a target regression unit.
+ */
+export function normalizeTemperaturesToUnit(
+  temperatures: Temperature[],
+  unit: RegressionTemperatureUnit,
+): number[] {
+  return normalizeUnit(temperatures, unit, "temperatures", ["K", "C", "F", "R"]);
+}
+
+/**
+ * Normalize typed pressure objects into a target regression unit.
+ */
+export function normalizePressuresToUnit(
+  pressures: Pressure[],
+  unit: RegressionPressureUnit,
+): number[] {
+  return normalizeUnit(pressures, unit, "pressures", ["Pa", "kPa", "bar", "atm", "psi"]);
 }

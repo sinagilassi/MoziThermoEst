@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import type { Pressure, Temperature } from "mozithermodb-settings";
 import { Antoine } from "./antoine";
 import { calcVaporPressure, estimateCoefficients, estimateCoefficientsFromExperimentalData } from "../docs/antoine";
+import type { AntoineFitResult } from "../types/antoine";
 
 function makeSyntheticData(): { T: number[]; P: number[]; A: number; B: number; C: number } {
   const A = 10;
@@ -27,6 +28,10 @@ describe("Antoine core", () => {
     expect(res.B).not.toBeNull();
     expect(res.C).not.toBeNull();
     expect(res.rmseLogP as number).toBeLessThan(1e-4);
+    expect(res.rmse_logP).toBe(res.rmseLogP);
+    expect(res.p_unit).toBe(res.pUnit);
+    expect(res.T_unit_internal).toBe(res.TUnitInternal);
+    expect(res.fit_in_log_space).toBe(res.fitInLogSpace);
   });
 
   it("calc works for log10 and ln", () => {
@@ -53,6 +58,19 @@ describe("Antoine core", () => {
     expect(Math.abs((res.A as number) - syn.A)).toBeLessThan(0.5);
     expect(Math.abs((res.B as number) - syn.B)).toBeLessThan(150);
     expect(Math.abs((res.C as number) - syn.C)).toBeLessThan(25);
+  });
+
+  it("stores regression units in fit result", () => {
+    const syn = makeSyntheticData();
+    const T_C = syn.T.map((t) => t - 273.15);
+    const P_bar = syn.P.map((p) => p / 1e5);
+    const res = Antoine.fitAntoine(T_C, P_bar, {
+      regression_temperature_unit: "C",
+      regression_pressure_unit: "bar",
+      base: "log10",
+    });
+    expect(res.p_unit).toBe("bar");
+    expect(res.T_unit_internal).toBe("C");
   });
 
   it("robust loss handles outlier better than linear", () => {
@@ -131,5 +149,26 @@ describe("Antoine docs wrappers", () => {
     expect(p).not.toBeNull();
     expect((p as Pressure).unit).toBe("bar");
     expect((p as Pressure).value).toBeGreaterThan(0);
+  });
+
+  it("calcVaporPressure throws on regression unit mismatch", () => {
+    const syn = makeSyntheticData();
+    const Ts: Temperature[] = syn.T.map((v) => ({ value: v, unit: "K" }));
+    const Ps: Pressure[] = syn.P.map((v) => ({ value: v, unit: "Pa" }));
+    const fit = estimateCoefficients(Ts, Ps);
+    expect(fit).not.toBeNull();
+    expect(() =>
+      calcVaporPressure(
+        { value: 300, unit: "K" },
+        10,
+        2500,
+        -30,
+        {
+          base: "log10",
+          regression_pressure_unit: "bar",
+          fit: fit as AntoineFitResult,
+        },
+      ),
+    ).toThrow();
   });
 });

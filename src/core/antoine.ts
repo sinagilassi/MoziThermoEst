@@ -6,12 +6,15 @@ import type {
   AntoineBase,
   AntoineFitResult,
   AntoineLoss,
+  EstimateCoefficientsOptions,
   FitAntoineOptions,
   OutlierReportItem,
   PressureUnit,
+  RegressionPressureUnit,
+  RegressionTemperatureUnit,
   TemperatureUnit,
 } from "@/types/antoine";
-import { fromPa, toKelvin, toPa } from "@/utils/units";
+import { convertUnit, fromPa, toKelvin } from "@/utils/units";
 import { finiteArray, parseCsvLine } from "@/utils/tools";
 
 const DEFAULT_BOUNDS: [[number, number, number], [number, number, number]] = [
@@ -27,17 +30,31 @@ const EPS = 1e-12;
  * @param loss Robust loss used during fitting.
  * @returns Initialized failure result object.
  */
-const emptyResult = (base: AntoineBase = "log10", loss: AntoineLoss = "linear"): AntoineFitResult => ({
+const emptyResult = (
+  base: AntoineBase = "log10",
+  loss: AntoineLoss = "linear",
+  regressionTemperatureUnit: RegressionTemperatureUnit = "K",
+  regressionPressureUnit: RegressionPressureUnit = "Pa",
+  fitInLogSpace = true,
+): AntoineFitResult => ({
   A: null,
   B: null,
   C: null,
   base,
-  pUnit: "Pa",
-  TUnitInternal: "K",
-  fitInLogSpace: true,
+  p_unit: regressionPressureUnit,
+  T_unit_internal: regressionTemperatureUnit,
+  fit_in_log_space: fitInLogSpace,
+  pUnit: regressionPressureUnit,
+  TUnitInternal: regressionTemperatureUnit,
+  fitInLogSpace,
   success: false,
   message: "",
   cost: null,
+  rmse_logP: null,
+  mae_logP: null,
+  r2_logP: null,
+  rmse_P: null,
+  mae_P: null,
   rmseLogP: null,
   maeLogP: null,
   r2LogP: null,
@@ -45,11 +62,84 @@ const emptyResult = (base: AntoineBase = "log10", loss: AntoineLoss = "linear"):
   maeP: null,
   cov: null,
   warnings: [],
+  Tmin_K: null,
+  Tmax_K: null,
   TminK: null,
   TmaxK: null,
   loss,
+  f_scale: null,
   fScale: null,
 });
+
+type ResolvedFitOptions = {
+  regressionTemperatureUnit: RegressionTemperatureUnit;
+  regressionPressureUnit: RegressionPressureUnit;
+  base: AntoineBase;
+  loss: AntoineLoss;
+  fitInLogSpace: boolean;
+  weights?: number[];
+  x0?: [number, number, number] | null;
+  bounds?: [[number, number, number], [number, number, number]] | null;
+  maxNfev: number;
+  validate: boolean;
+  minMarginKelvin: number;
+  fScale?: number | null;
+};
+
+const resolveFitOptions = (
+  options: FitAntoineOptions | EstimateCoefficientsOptions = {},
+): ResolvedFitOptions => {
+  const legacy = options as FitAntoineOptions;
+  const modern = options as EstimateCoefficientsOptions;
+  const regressionTemperatureUnit =
+    modern.regression_temperature_unit ?? legacy.TUnit ?? "K";
+  const regressionPressureUnit =
+    modern.regression_pressure_unit ?? legacy.pUnit ?? "Pa";
+
+  const base = (modern.base ?? legacy.base ?? "log10").toLowerCase() as AntoineBase;
+  const loss = (modern.loss ?? legacy.loss ?? "linear").toLowerCase() as AntoineLoss;
+  const fitInLogSpace = modern.fit_in_log_space ?? legacy.fitInLogSpace ?? true;
+  const maxNfev = modern.max_nfev ?? legacy.maxNfev ?? 5000;
+  const minMarginKelvin = modern.min_margin_kelvin ?? legacy.minMarginKelvin ?? 1.0;
+  const validate = modern.validate ?? legacy.validate ?? true;
+
+  const x0 =
+    modern.x0 !== undefined ? modern.x0 : legacy.x0 !== undefined ? legacy.x0 : null;
+  const bounds =
+    modern.bounds !== undefined ? modern.bounds : legacy.bounds !== undefined ? legacy.bounds : null;
+  const fScale =
+    modern.f_scale !== undefined ? modern.f_scale : legacy.fScale !== undefined ? legacy.fScale : null;
+  const weights = modern.weights ?? legacy.weights;
+
+  return {
+    regressionTemperatureUnit,
+    regressionPressureUnit,
+    base,
+    loss,
+    fitInLogSpace,
+    weights,
+    x0,
+    bounds,
+    maxNfev,
+    validate,
+    minMarginKelvin,
+    fScale,
+  };
+};
+
+export const assertUnitsMatch = (
+  fitReport: AntoineFitResult,
+  regressionTemperatureUnit: RegressionTemperatureUnit,
+  regressionPressureUnit: RegressionPressureUnit,
+): void => {
+  const tUnit = fitReport.T_unit_internal ?? fitReport.TUnitInternal;
+  const pUnit = fitReport.p_unit ?? fitReport.pUnit;
+  if (tUnit !== regressionTemperatureUnit || pUnit !== regressionPressureUnit) {
+    throw new Error(
+      `Regression unit mismatch: coefficients were fitted with ${tUnit}/${pUnit}, but ${regressionTemperatureUnit}/${regressionPressureUnit} was requested.`,
+    );
+  }
+};
 
 /**
  * SECTION: Antoine vapor-pressure model operations: fitting, evaluation, diagnostics, and data loading.
@@ -59,7 +149,7 @@ export class Antoine {
   /**
    * Antoine logarithmic model: `A - B / (T + C)`.
    * @param params Antoine parameter tuple `[A, B, C]`.
-   * @param tK Temperature values in Kelvin.
+   * @param tK Temperature values in regression temperature units.
    * @returns Log-pressure model values.
    */
   private static modelLog(params: Vector3, tK: number[]): number[] {
@@ -70,8 +160,8 @@ export class Antoine {
   /**
    * NOTE: Build residual vector either in log-pressure space or pressure space.
    * @param params Antoine parameter tuple `[A, B, C]`.
-   * @param tK Temperature values in Kelvin.
-   * @param pPa Pressure values in Pascal.
+   * @param tK Temperature values in regression temperature units.
+   * @param pPa Pressure values in regression pressure units.
    * @param base Logarithm base.
    * @param fitInLogSpace Whether residuals are computed in log space.
    * @returns Residual vector.
@@ -98,12 +188,27 @@ export class Antoine {
    * @param options Fit options.
    * @returns Structured fit result including coefficients and diagnostics.
    */
-  static fitAntoine(TData: number[], PData: number[], options: FitAntoineOptions = {}): AntoineFitResult {
-    const base = (options.base ?? "log10").toLowerCase() as AntoineBase;
-    const loss = (options.loss ?? "linear").toLowerCase() as AntoineLoss;
-    const fitInLogSpace = options.fitInLogSpace ?? true;
-    const out = emptyResult(base, loss);
-    out.fitInLogSpace = fitInLogSpace;
+  static fitAntoine(
+    TData: number[],
+    PData: number[],
+    options: FitAntoineOptions | EstimateCoefficientsOptions = {},
+  ): AntoineFitResult {
+    const resolved = resolveFitOptions(options);
+    const {
+      regressionTemperatureUnit,
+      regressionPressureUnit,
+      base,
+      loss,
+      fitInLogSpace,
+      maxNfev,
+      minMarginKelvin,
+      validate,
+      x0: x0Input,
+      bounds: boundsInput,
+      fScale: fScaleInput,
+      weights,
+    } = resolved;
+    const out = emptyResult(base, loss, regressionTemperatureUnit, regressionPressureUnit, fitInLogSpace);
 
     const T = [...TData].map((x) => Number(x));
     const P = [...PData].map((x) => Number(x));
@@ -112,42 +217,39 @@ export class Antoine {
       return out;
     }
 
-    const TUnit = (options.TUnit ?? "K") as TemperatureUnit;
-    const pUnit = (options.pUnit ?? "Pa") as PressureUnit;
-    const tK = T.map((v) => toKelvin(v, TUnit));
-    const pPa = P.map((v) => toPa(v, pUnit));
-    if (!finiteArray(tK) || !finiteArray(pPa) || pPa.some((v) => v <= 0)) {
-      out.message = "Failed to normalize units or pressure values are non-positive.";
-      return out;
-    }
-
     if (base !== "log10" && base !== "ln") {
       out.message = "base must be 'log10' or 'ln'.";
       return out;
     }
 
-    const staticWeights = new Array<number>(tK.length).fill(1.0);
-    if (options.weights !== undefined) {
-      if (options.weights.length !== tK.length || !finiteArray(options.weights)) {
+    const tReg = T;
+    const pReg = P;
+    if (!finiteArray(tReg) || !finiteArray(pReg) || pReg.some((v) => v <= 0)) {
+      out.message = "Failed to normalize units or pressure values are non-positive.";
+      return out;
+    }
+
+    const staticWeights = new Array<number>(tReg.length).fill(1.0);
+    if (weights !== undefined) {
+      if (weights.length !== tReg.length || !finiteArray(weights)) {
         out.message = "weights must have same length as data and be finite.";
         return out;
       }
-      for (let i = 0; i < options.weights.length; i += 1) {
-        staticWeights[i] = Math.sqrt(Math.max(options.weights[i], 0));
+      for (let i = 0; i < weights.length; i += 1) {
+        staticWeights[i] = Math.sqrt(Math.max(weights[i], 0));
       }
     }
 
-    const y = pPa.map((v) => (base === "log10" ? Math.log10(v) : Math.log(v)));
+    const y = pReg.map((v) => (base === "log10" ? Math.log10(v) : Math.log(v)));
     let x0: Vector3;
-    if (options.x0) {
-      x0 = [options.x0[0], options.x0[1], options.x0[2]];
+    if (x0Input) {
+      x0 = [x0Input[0], x0Input[1], x0Input[2]];
     } else {
       let C0 = -50.0;
-      const minMarginKelvin = options.minMarginKelvin ?? 1.0;
-      if (Math.min(...tK.map((v) => v + C0)) <= minMarginKelvin) C0 = -Math.min(...tK) + 10.0;
+      if (Math.min(...tReg.map((v) => v + C0)) <= minMarginKelvin) C0 = -Math.min(...tReg) + 10.0;
 
       const A0 = y.reduce((acc, v) => acc + v, 0) / y.length;
-      const x = tK.map((v) => 1.0 / v);
+      const x = tReg.map((v) => 1.0 / v);
       const xMean = x.reduce((acc, v) => acc + v, 0) / x.length;
       const yMean = y.reduce((acc, v) => acc + v, 0) / y.length;
       let sxy = 0;
@@ -157,23 +259,22 @@ export class Antoine {
         sxx += (x[i] - xMean) * (x[i] - xMean);
       }
       const m = sxx > 0 ? sxy / sxx : -2000;
-      const tMean = tK.reduce((acc, v) => acc + v, 0) / tK.length;
-      const ratio = ((tK.reduce((acc, v) => acc + (v + C0), 0) / tK.length) / tMean) ** 2;
+      const tMean = tReg.reduce((acc, v) => acc + v, 0) / tReg.length;
+      const ratio = ((tReg.reduce((acc, v) => acc + (v + C0), 0) / tReg.length) / tMean) ** 2;
       let B0 = Math.abs(m) * ratio;
       if (!Number.isFinite(B0) || B0 <= 1e-6) B0 = 2000.0;
       x0 = [A0, B0, C0];
     }
 
-    const bounds = options.bounds ?? DEFAULT_BOUNDS;
-    const maxNfev = options.maxNfev ?? 5000;
+    const bounds = boundsInput ?? DEFAULT_BOUNDS;
 
-    let fScale = options.fScale;
+    let fScale = fScaleInput;
     if (fScale === undefined || fScale === null) {
       if (loss !== "linear") {
         if (fitInLogSpace) {
           fScale = 0.02;
         } else {
-          const sorted = [...pPa].sort((a, b) => a - b);
+          const sorted = [...pReg].sort((a, b) => a - b);
           const med = sorted[Math.floor(sorted.length / 2)];
           fScale = Math.max(1.0, med * 0.02);
         }
@@ -190,14 +291,14 @@ export class Antoine {
       loss,
       fScale,
       staticWeights,
-      residualFn: (params) => Antoine.makeResidualBase(params, tK, pPa, base, fitInLogSpace),
+      residualFn: (params) => Antoine.makeResidualBase(params, tReg, pReg, base, fitInLogSpace),
     });
 
     const [A, B, C] = solve.x;
-    const yHat = Antoine.modelLog([A, B, C], tK);
+    const yHat = Antoine.modelLog([A, B, C], tReg);
     const pHat = yHat.map((v) => (base === "log10" ? 10 ** v : Math.exp(v)));
     const logRes = yHat.map((v, i) => v - y[i]);
-    const pRes = pHat.map((v, i) => v - pPa[i]);
+    const pRes = pHat.map((v, i) => v - pReg[i]);
 
     const rmseLogP = Math.sqrt(logRes.reduce((acc, v) => acc + v * v, 0) / logRes.length);
     const maeLogP = logRes.reduce((acc, v) => acc + Math.abs(v), 0) / logRes.length;
@@ -212,22 +313,20 @@ export class Antoine {
     const jtJ = transposeMulSelf(solve.jacobianWeighted);
     const inv = invert3x3(jtJ);
     if (inv) {
-      const dof = Math.max(1, tK.length - 3);
+      const dof = Math.max(1, tReg.length - 3);
       const sigma2 = (2.0 * solve.cost) / dof;
       cov = inv.map((row) => row.map((v) => v * sigma2));
     }
 
     const warnings: string[] = [];
-    const validate = options.validate ?? true;
-    const minMarginKelvin = options.minMarginKelvin ?? 1.0;
     if (validate) {
-      const denomMin = Math.min(...tK.map((v) => v + C));
+      const denomMin = Math.min(...tReg.map((v) => v + C));
       if (denomMin <= minMarginKelvin) {
         warnings.push(
-          `Risky fit: min(T + C) = ${denomMin.toPrecision(6)} K (<= ${minMarginKelvin} K). Denominator near zero can make the fit unstable.`,
+          `Risky fit: min(T + C) = ${denomMin.toPrecision(6)} (<= ${minMarginKelvin}). Denominator near zero can make the fit unstable.`,
         );
       }
-      const idx = tK
+      const idx = tReg
         .map((t, i) => ({ t, i }))
         .sort((a, b) => a.t - b.t)
         .map((x) => x.i);
@@ -246,12 +345,20 @@ export class Antoine {
       B,
       C,
       base,
-      pUnit: "Pa",
-      TUnitInternal: "K",
+      p_unit: regressionPressureUnit,
+      T_unit_internal: regressionTemperatureUnit,
+      fit_in_log_space: fitInLogSpace,
+      pUnit: regressionPressureUnit,
+      TUnitInternal: regressionTemperatureUnit,
       fitInLogSpace,
       success: solve.success,
       message: solve.message,
       cost: solve.cost,
+      rmse_logP: rmseLogP,
+      mae_logP: maeLogP,
+      r2_logP: r2LogP,
+      rmse_P: rmseP,
+      mae_P: maeP,
       rmseLogP,
       maeLogP,
       r2LogP,
@@ -259,9 +366,12 @@ export class Antoine {
       maeP,
       cov,
       warnings,
-      TminK: Math.min(...tK),
-      TmaxK: Math.max(...tK),
+      Tmin_K: Math.min(...tReg.map((v) => toKelvin(v, regressionTemperatureUnit))),
+      Tmax_K: Math.max(...tReg.map((v) => toKelvin(v, regressionTemperatureUnit))),
+      TminK: Math.min(...tReg.map((v) => toKelvin(v, regressionTemperatureUnit))),
+      TmaxK: Math.max(...tReg.map((v) => toKelvin(v, regressionTemperatureUnit))),
       loss,
+      f_scale: fScale,
       fScale,
     };
   }
@@ -286,18 +396,20 @@ export class Antoine {
     },
   ): OutlierReportItem[] {
     if (fitReport.A === null || fitReport.B === null || fitReport.C === null) return [];
-    const TUnit = options?.TUnit ?? "K";
-    const pUnit = options?.pUnit ?? "Pa";
+    const fitTUnit = (fitReport.T_unit_internal ?? fitReport.TUnitInternal ?? "K") as RegressionTemperatureUnit;
+    const fitPUnit = (fitReport.p_unit ?? fitReport.pUnit ?? "Pa") as RegressionPressureUnit;
+    const inputTUnit = options?.TUnit ?? fitTUnit ?? "K";
+    const inputPUnit = options?.pUnit ?? fitPUnit ?? "Pa";
     const topN = options?.topN ?? 10;
     const residualDomain = (options?.residualDomain ?? "log").toLowerCase();
 
-    const tK = TData.map((v) => toKelvin(v, TUnit));
-    const pPa = PData.map((v) => toPa(v, pUnit));
-    if (!finiteArray(tK) || !finiteArray(pPa) || pPa.some((v) => v <= 0)) return [];
+    const tReg = TData.map((v) => convertUnit(v, inputTUnit, fitTUnit));
+    const pReg = PData.map((v) => convertUnit(v, inputPUnit, fitPUnit));
+    if (!finiteArray(tReg) || !finiteArray(pReg) || pReg.some((v) => v <= 0)) return [];
 
-    const yHat = Antoine.modelLog([fitReport.A, fitReport.B, fitReport.C], tK);
+    const yHat = Antoine.modelLog([fitReport.A, fitReport.B, fitReport.C], tReg);
     const pHat = yHat.map((v) => (fitReport.base === "log10" ? 10 ** v : Math.exp(v)));
-    const y = pPa.map((v) => (fitReport.base === "log10" ? Math.log10(v) : Math.log(v)));
+    const y = pReg.map((v) => (fitReport.base === "log10" ? Math.log10(v) : Math.log(v)));
 
     let r: number[];
     if (residualDomain === "log") {
@@ -308,7 +420,8 @@ export class Antoine {
       return [];
     }
 
-    const fScale = fitReport.fScale && fitReport.fScale > 0 ? fitReport.fScale : 1.0;
+    const fScaleValue = fitReport.f_scale ?? fitReport.fScale;
+    const fScale = fScaleValue && fScaleValue > 0 ? fScaleValue : 1.0;
     const z = r.map((v) => v / fScale);
     const wRob = z.map((zi) => robustWeight(fitReport.loss, zi));
 
@@ -324,9 +437,9 @@ export class Antoine {
 
     return ranked.map((i) => ({
       index: i,
-      TK: tK[i],
-      PInputPa: pPa[i],
-      PFitPa: pHat[i],
+      TK: convertUnit(tReg[i], fitTUnit, "K"),
+      PInputPa: convertUnit(pReg[i], fitPUnit, "Pa"),
+      PFitPa: convertUnit(pHat[i], fitPUnit, "Pa"),
       residual: r[i],
       standardizedResidual: z[i],
       robustWeight: wRob[i],
@@ -378,14 +491,14 @@ export class Antoine {
   }
 
   /**
-   * NOTE: Calculate saturation pressure in Pascal using Antoine coefficients.
+   * NOTE: Calculate saturation pressure in regression pressure units using Antoine coefficients.
    * @param TValue Input temperature value.
    * @param TUnit Temperature unit.
    * @param A Antoine coefficient A.
    * @param B Antoine coefficient B.
    * @param C Antoine coefficient C.
    * @param base Logarithm base.
-   * @returns Pressure in Pascal or `null` on invalid input.
+   * @returns Pressure in regression pressure units or `null` on invalid input.
    */
   static calc(
     TValue: number,
@@ -394,16 +507,16 @@ export class Antoine {
     B: number,
     C: number,
     base: AntoineBase = "log10",
+    pressureUnit: RegressionPressureUnit = "Pa",
   ): Pressure | null {
     if (![TValue, A, B, C].every((v) => Number.isFinite(v))) return null;
     if (base !== "log10" && base !== "ln") return null;
 
     try {
-      const TK = toKelvin(TValue, TUnit);
-      const logP = A - B / (TK + C);
+      const logP = A - B / (TValue + C);
       const vaporPressure = base === "log10" ? 10 ** logP : Math.exp(logP);
       if (!Number.isFinite(vaporPressure)) return null;
-      return { value: vaporPressure, unit: "Pa" };
+      return { value: vaporPressure, unit: pressureUnit };
     } catch {
       return null;
     }

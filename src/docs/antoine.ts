@@ -1,16 +1,23 @@
 import type { Pressure, Temperature } from "mozithermodb-settings";
-import { Antoine } from "../core/antoine";
+import { Antoine, assertUnitsMatch } from "../core/antoine";
 import type {
   AntoineBase,
   AntoineFitResult,
   AntoineLoss,
+  EstimateCoefficientsOptions,
   PressureUnit,
+  RegressionPressureUnit,
+  RegressionTemperatureUnit,
   TemperatureUnit,
 } from "../types/antoine";
-import { normalizePressures, normalizeTemperatures, toKelvin } from "../utils/units";
+import {
+  convertUnit,
+  normalizePressuresToUnit,
+  normalizeTemperaturesToUnit,
+} from "../utils/units";
 import { isFiniteNumber } from "../utils/tools";
 
-interface EstimateOptions {
+interface EstimateOptions extends EstimateCoefficientsOptions {
   base?: AntoineBase;
   fitInLogSpace?: boolean;
   weights?: number[];
@@ -21,6 +28,8 @@ interface EstimateOptions {
   minMarginKelvin?: number;
   loss?: AntoineLoss;
   fScale?: number;
+  TUnit?: TemperatureUnit;
+  pUnit?: PressureUnit;
 }
 
 interface EstimateFromFileOptions extends EstimateOptions {
@@ -31,6 +40,10 @@ interface EstimateFromFileOptions extends EstimateOptions {
 interface CalcVaporPressureOptions {
   base?: AntoineBase;
   pressureUnit?: PressureUnit;
+  pressure_unit?: PressureUnit;
+  regression_temperature_unit?: RegressionTemperatureUnit;
+  regression_pressure_unit?: RegressionPressureUnit;
+  fit?: AntoineFitResult;
 }
 
 /**
@@ -50,14 +63,24 @@ export function estimateCoefficients(
   if (!temperatures.every((t) => isFiniteNumber(t?.value) && typeof t?.unit === "string")) return null;
   if (!pressures.every((p) => isFiniteNumber(p?.value) && typeof p?.unit === "string")) return null;
 
-  const tK = normalizeTemperatures(temperatures);
-  const pPa = normalizePressures(pressures);
-  if (!tK || !pPa) return null;
+  const regressionTemperatureUnit =
+    options.regression_temperature_unit ?? options.TUnit ?? "K";
+  const regressionPressureUnit =
+    options.regression_pressure_unit ?? options.pUnit ?? "Pa";
 
-  const result = Antoine.fitAntoine(tK, pPa, {
+  let tReg: number[];
+  let pReg: number[];
+  try {
+    tReg = normalizeTemperaturesToUnit(temperatures, regressionTemperatureUnit);
+    pReg = normalizePressuresToUnit(pressures, regressionPressureUnit);
+  } catch {
+    return null;
+  }
+
+  const result = Antoine.fitAntoine(tReg, pReg, {
     ...options,
-    TUnit: "K",
-    pUnit: "Pa",
+    regression_temperature_unit: regressionTemperatureUnit,
+    regression_pressure_unit: regressionPressureUnit,
   });
   return result.success || result.A !== null ? result : null;
 }
@@ -74,14 +97,27 @@ export function estimateCoefficientsFromExperimentalData(
 ): AntoineFitResult | null {
   const temperatureUnit = options.temperatureUnit ?? "K";
   const pressureUnit = options.pressureUnit ?? "Pa";
+  const regressionTemperatureUnit =
+    options.regression_temperature_unit ?? options.TUnit ?? "K";
+  const regressionPressureUnit =
+    options.regression_pressure_unit ?? options.pUnit ?? "Pa";
 
   const loaded = Antoine.loadExperimentalData(experimentalData, temperatureUnit, pressureUnit);
   if (loaded.temperaturesK.length === 0 || loaded.pressuresPa.length === 0) return null;
 
-  const result = Antoine.fitAntoine(loaded.temperaturesK, loaded.pressuresPa, {
+  let tReg: number[];
+  let pReg: number[];
+  try {
+    tReg = loaded.temperaturesK.map((v) => convertUnit(v, "K", regressionTemperatureUnit));
+    pReg = loaded.pressuresPa.map((v) => convertUnit(v, "Pa", regressionPressureUnit));
+  } catch {
+    return null;
+  }
+
+  const result = Antoine.fitAntoine(tReg, pReg, {
     ...options,
-    TUnit: "K",
-    pUnit: "Pa",
+    regression_temperature_unit: regressionTemperatureUnit,
+    regression_pressure_unit: regressionPressureUnit,
   });
   return result.success || result.A !== null ? result : null;
 }
@@ -106,21 +142,33 @@ export function calcVaporPressure(
   if (![A, B, C].every((v) => Number.isFinite(v))) return null;
 
   const base = options.base ?? "log10";
-  const pressureUnit = options.pressureUnit ?? "Pa";
+  const pressureUnit = options.pressure_unit ?? options.pressureUnit ?? "Pa";
+  const fit = options.fit;
+  const fitTUnit = fit?.T_unit_internal ?? fit?.TUnitInternal;
+  const fitPUnit = fit?.p_unit ?? fit?.pUnit;
 
-  let TK: number;
+  const regressionTemperatureUnit =
+    options.regression_temperature_unit ?? fitTUnit ?? (temperature.unit as RegressionTemperatureUnit);
+  const regressionPressureUnit =
+    options.regression_pressure_unit ?? fitPUnit ?? "Pa";
+
+  if (fit && fitTUnit && fitPUnit) {
+    assertUnitsMatch(fit, regressionTemperatureUnit, regressionPressureUnit);
+  }
+
+  let TReg: number;
   try {
-    TK = toKelvin(temperature.value, temperature.unit as TemperatureUnit);
+    TReg = convertUnit(temperature.value, temperature.unit, regressionTemperatureUnit);
   } catch {
     return null;
   }
 
-  const calcRes = Antoine.calc(TK, "K", A, B, C, base);
+  const calcRes = Antoine.calc(TReg, regressionTemperatureUnit, A, B, C, base, regressionPressureUnit);
   if (!calcRes) return null;
 
   let outputValue = calcRes.value;
-  if (pressureUnit !== "Pa") {
-    outputValue = Antoine.convertPressureFromPa(calcRes.value, pressureUnit);
+  if (pressureUnit !== regressionPressureUnit) {
+    outputValue = convertUnit(calcRes.value, regressionPressureUnit, pressureUnit);
   }
 
   return {

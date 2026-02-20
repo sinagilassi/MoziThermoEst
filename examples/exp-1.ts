@@ -22,6 +22,8 @@ const fit = estimateCoefficients(Ts, Ps, {
   base: "log10",
   fitInLogSpace: true,
   loss: "soft_l1",
+  regression_temperature_unit: "K",
+  regression_pressure_unit: "Pa",
 });
 
 console.log("\n=== In-memory Antoine fit ===");
@@ -32,6 +34,8 @@ if (!fit || fit.A === null || fit.B === null || fit.C === null) {
     A: fit.A,
     B: fit.B,
     C: fit.C,
+    p_unit: fit.p_unit,
+    T_unit_internal: fit.T_unit_internal,
     success: fit.success,
     message: fit.message,
     rmseLogP: fit.rmseLogP,
@@ -42,6 +46,7 @@ if (!fit || fit.A === null || fit.B === null || fit.C === null) {
   const predicted = Ts.map((t) =>
     calcVaporPressure(t, fit.A as number, fit.B as number, fit.C as number, {
       base: fit.base,
+      fit,
       pressureUnit: "Pa",
     }),
   )
@@ -73,6 +78,8 @@ const fitFromCsv = estimateCoefficientsFromExperimentalData(data2Path, {
   temperatureUnit: "K",
   pressureUnit: "Pa",
   base: "log10",
+  regression_temperature_unit: "K",
+  regression_pressure_unit: "Pa",
 });
 
 if (!fitFromCsv || fitFromCsv.A === null || fitFromCsv.B === null || fitFromCsv.C === null) {
