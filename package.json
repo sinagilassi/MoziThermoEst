@@ -37,6 +37,7 @@
     "pack:make": "npm pack"
   },
   "dependencies": {
+    "mozicuc": "^1.1.0",
     "mozithermodb-settings": "^1.0.0"
   },
   "devDependencies": {
