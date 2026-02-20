@@ -62,3 +62,6 @@ coverage/
 
 # pkg
 py-pkg/
+
+# private
+private/
