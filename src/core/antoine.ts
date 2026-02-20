@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import type { Pressure } from "mozithermodb-settings";
-import { invert3x3, leastSquares, transposeMulSelf, type Vector3 } from "../solvers/leastSquares";
-import { robustWeight } from "../solvers/robust";
+import { invert3x3, leastSquares, transposeMulSelf, type Vector3 } from "@/solvers/leastSquares";
+import { robustWeight } from "@/solvers/robust";
 import type {
   AntoineBase,
   AntoineFitResult,
@@ -10,9 +10,9 @@ import type {
   OutlierReportItem,
   PressureUnit,
   TemperatureUnit,
-} from "../types/antoine";
-import { fromPa, toKelvin, toPa } from "../utils/units";
-import { finiteArray, parseCsvLine } from "../utils/tools";
+} from "@/types/antoine";
+import { fromPa, toKelvin, toPa } from "@/utils/units";
+import { finiteArray, parseCsvLine } from "@/utils/tools";
 
 const DEFAULT_BOUNDS: [[number, number, number], [number, number, number]] = [
   [-200.0, 1e-6, -1e4],
@@ -22,7 +22,7 @@ const DEFAULT_BOUNDS: [[number, number, number], [number, number, number]] = [
 const EPS = 1e-12;
 
 /**
- * Build an empty Antoine fit result with failure defaults.
+ * NOTE: Build an empty Antoine fit result with failure defaults.
  * @param base Logarithm base used by Antoine model.
  * @param loss Robust loss used during fitting.
  * @returns Initialized failure result object.
@@ -52,7 +52,8 @@ const emptyResult = (base: AntoineBase = "log10", loss: AntoineLoss = "linear"):
 });
 
 /**
- * Antoine vapor-pressure model operations: fitting, evaluation, diagnostics, and data loading.
+ * SECTION: Antoine vapor-pressure model operations: fitting, evaluation, diagnostics, and data loading.
+ * TODO:
  */
 export class Antoine {
   /**
@@ -67,7 +68,7 @@ export class Antoine {
   }
 
   /**
-   * Build residual vector either in log-pressure space or pressure space.
+   * NOTE: Build residual vector either in log-pressure space or pressure space.
    * @param params Antoine parameter tuple `[A, B, C]`.
    * @param tK Temperature values in Kelvin.
    * @param pPa Pressure values in Pascal.
@@ -91,7 +92,7 @@ export class Antoine {
   }
 
   /**
-   * Fit Antoine coefficients `(A, B, C)` to temperature/pressure data.
+   * NOTE: Fit Antoine coefficients `(A, B, C)` to temperature/pressure data.
    * @param TData Temperature data points.
    * @param PData Pressure data points.
    * @param options Fit options.
@@ -266,7 +267,7 @@ export class Antoine {
   }
 
   /**
-   * Rank likely outliers using standardized residuals and robust weights.
+   * NOTE: Rank likely outliers using standardized residuals and robust weights.
    * @param TData Temperature data points.
    * @param PData Pressure data points.
    * @param fitReport Antoine fit report.
@@ -333,7 +334,7 @@ export class Antoine {
   }
 
   /**
-   * Load experimental temperature/pressure CSV data and normalize to `K`/`Pa`.
+   * NOTE: Load experimental temperature/pressure CSV data and normalize to `K`/`Pa`.
    * @param experimentalDataPath CSV path.
    * @param TUnit Input temperature unit.
    * @param PUnit Input pressure unit.
@@ -377,7 +378,7 @@ export class Antoine {
   }
 
   /**
-   * Calculate saturation pressure in Pascal using Antoine coefficients.
+   * NOTE: Calculate saturation pressure in Pascal using Antoine coefficients.
    * @param TValue Input temperature value.
    * @param TUnit Temperature unit.
    * @param A Antoine coefficient A.
@@ -409,7 +410,7 @@ export class Antoine {
   }
 
   /**
-   * Convert pressure from Pascal to any supported pressure unit.
+   * NOTE: Convert pressure from Pascal to any supported pressure unit.
    * @param valuePa Pressure value in Pascal.
    * @param outputUnit Target pressure unit.
    * @returns Converted pressure value.
