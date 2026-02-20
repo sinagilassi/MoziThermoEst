@@ -1,5 +1,6 @@
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+/// <reference types="node" />
+import path from "path";
+import { fileURLToPath } from "url";
 import type { Pressure, Temperature } from "mozithermodb-settings";
 import {
   Antoine,
