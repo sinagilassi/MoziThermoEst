@@ -1,0 +1,61 @@
+{
+  "name": "mozithermoest",
+  "version": "1.0.0",
+  "description": "MoziThermoEst is a toolkit for estimating thermodynamic properties.",
+  "homepage": "https://github.com/sinagilassi/MoziThermoEst#readme",
+  "bugs": {
+    "url": "https://github.com/sinagilassi/MoziThermoEst/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sinagilassi/MoziThermoEst.git"
+  },
+  "license": "Apache-2.0",
+  "author": "Sina Gilassi",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "browser": "./dist/index.browser.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "browser": "./dist/index.browser.mjs",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "rollup -c",
+    "test": "npm run build && node --no-deprecation node_modules/vitest/vitest.mjs",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint . --ext .ts",
+    "pack:check": "npm pack --dry-run",
+    "pack:make": "npm pack"
+  },
+  "dependencies": {
+    "mozithermodb-settings": "^1.0.0"
+  },
+  "devDependencies": {
+    "@rollup/plugin-node-resolve": "^15.3.0",
+    "@rollup/plugin-typescript": "^11.1.6",
+    "@types/node": "^20.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.56.0",
+    "@typescript-eslint/parser": "^8.56.0",
+    "csv-parse": "^5.5.0",
+    "eslint": "^10.0.0",
+    "rollup": "^4.17.2",
+    "rollup-plugin-dts": "^6.1.1",
+    "rollup-plugin-tsconfig-paths": "^1.0.4",
+    "ts-node": "^10.9.2",
+    "tsconfig-paths": "^4.2.0",
+    "tslib": "^2.8.1",
+    "tsx": "^4.21.0",
+    "typedoc": "^0.28.17",
+    "typescript": "^5.6.3",
+    "vitest": "^4.0.17"
+  }
+}
