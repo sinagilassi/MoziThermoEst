@@ -15,15 +15,18 @@ const pressures = [
   125642.5053, 167269.663, 219161.9542,
 ];
 
-const Ts: Temperature[] = temperatures.map((value) => ({ value, unit: "K" }));
-const Ps: Pressure[] = pressures.map((value) => ({ value, unit: "Pa" }));
+const T_unit = "K";
+const P_unit = "Pa";
+
+const Ts: Temperature[] = temperatures.map((value) => ({ value, unit: T_unit }));
+const Ps: Pressure[] = pressures.map((value) => ({ value, unit: P_unit }));
 
 const fit = estimateCoefficients(Ts, Ps, {
   base: "log10",
   fitInLogSpace: true,
   loss: "soft_l1",
-  regression_temperature_unit: "K",
-  regression_pressure_unit: "Pa",
+  regression_temperature_unit: T_unit,
+  regression_pressure_unit: P_unit,
 });
 
 console.log("\n=== In-memory Antoine fit ===");
@@ -47,7 +50,7 @@ if (!fit || fit.A === null || fit.B === null || fit.C === null) {
     calcVaporPressure(t, fit.A as number, fit.B as number, fit.C as number, {
       base: fit.base,
       fit,
-      pressureUnit: "Pa",
+      pressureUnit: P_unit,
     }),
   )
     .filter((x): x is Pressure => x !== null)
@@ -60,8 +63,8 @@ if (!fit || fit.A === null || fit.B === null || fit.C === null) {
     pressures,
     fit,
     {
-      TUnit: "K",
-      pUnit: "Pa",
+      TUnit: T_unit,
+      pUnit: P_unit,
       topN: 5,
       residualDomain: "log",
     },
@@ -75,11 +78,11 @@ const data2Path = path.resolve(__dirname, "../py-pkg/PyThermoEst-main/PyThermoEs
 
 console.log("\n=== CSV Antoine fit (data-2.csv) ===");
 const fitFromCsv = estimateCoefficientsFromExperimentalData(data2Path, {
-  temperatureUnit: "K",
-  pressureUnit: "Pa",
+  temperatureUnit: T_unit,
+  pressureUnit: P_unit,
   base: "log10",
-  regression_temperature_unit: "K",
-  regression_pressure_unit: "Pa",
+  regression_temperature_unit: T_unit,
+  regression_pressure_unit: P_unit,
 });
 
 if (!fitFromCsv || fitFromCsv.A === null || fitFromCsv.B === null || fitFromCsv.C === null) {

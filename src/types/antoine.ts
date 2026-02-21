@@ -1,3 +1,5 @@
+import type { Temperature } from "mozithermodb-settings";
+
 export type AntoineBase = "log10" | "ln";
 
 export type AntoineLoss = "linear" | "soft_l1" | "huber" | "cauchy" | "arctan";
@@ -9,16 +11,6 @@ export type PressureUnit = "Pa" | "kPa" | "bar" | "atm" | "psi";
 export type RegressionTemperatureUnit = TemperatureUnit;
 
 export type RegressionPressureUnit = PressureUnit;
-
-export interface Temperature {
-  value: number;
-  unit: RegressionTemperatureUnit;
-}
-
-export interface Pressure {
-  value: number;
-  unit: RegressionPressureUnit;
-}
 
 // Legacy: prefer EstimateCoefficientsOptions (Python-aligned).
 export interface FitAntoineOptions {
@@ -77,10 +69,8 @@ export interface AntoineFitResult {
   maeP: number | null;
   cov: number[][] | null;
   warnings: string[];
-  Tmin_K: number | null;
-  Tmax_K: number | null;
-  TminK: number | null;
-  TmaxK: number | null;
+  Tmin: Temperature | null;
+  Tmax: Temperature | null;
   loss: AntoineLoss;
   f_scale: number | null;
   fScale: number | null;

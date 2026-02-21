@@ -33,8 +33,8 @@ const EPS = 1e-12;
 const emptyResult = (
   base: AntoineBase = "log10",
   loss: AntoineLoss = "linear",
-  regressionTemperatureUnit: RegressionTemperatureUnit = "K",
-  regressionPressureUnit: RegressionPressureUnit = "Pa",
+  regressionTemperatureUnit: RegressionTemperatureUnit,
+  regressionPressureUnit: RegressionPressureUnit,
   fitInLogSpace = true,
 ): AntoineFitResult => ({
   A: null,
@@ -62,8 +62,8 @@ const emptyResult = (
   maeP: null,
   cov: null,
   warnings: [],
-  Tmin_K: null,
-  Tmax_K: null,
+  Tmin: null,
+  Tmax: null,
   TminK: null,
   TmaxK: null,
   loss,
@@ -91,10 +91,12 @@ const resolveFitOptions = (
 ): ResolvedFitOptions => {
   const legacy = options as FitAntoineOptions;
   const modern = options as EstimateCoefficientsOptions;
-  const regressionTemperatureUnit =
-    modern.regression_temperature_unit ?? legacy.TUnit ?? "K";
-  const regressionPressureUnit =
-    modern.regression_pressure_unit ?? legacy.pUnit ?? "Pa";
+  const regressionTemperatureUnit = modern.regression_temperature_unit;
+  const regressionPressureUnit = modern.regression_pressure_unit;
+
+  if (!regressionTemperatureUnit || !regressionPressureUnit) {
+    throw new Error("regression_temperature_unit and regression_pressure_unit are required.");
+  }
 
   const base = (modern.base ?? legacy.base ?? "log10").toLowerCase() as AntoineBase;
   const loss = (modern.loss ?? legacy.loss ?? "linear").toLowerCase() as AntoineLoss;
@@ -143,42 +145,48 @@ export const assertUnitsMatch = (
 
 /**
  * SECTION: Antoine vapor-pressure model operations: fitting, evaluation, diagnostics, and data loading.
- * TODO:
  */
 export class Antoine {
   /**
-   * Antoine logarithmic model: `A - B / (T + C)`.
+   * NOTE: Antoine logarithmic model: `A - B / (T + C)`.
    * @param params Antoine parameter tuple `[A, B, C]`.
-   * @param tK Temperature values in regression temperature units.
+   * @param t Temperature values in regression temperature units.
    * @returns Log-pressure model values.
    */
-  private static modelLog(params: Vector3, tK: number[]): number[] {
+  private static modelLog(params: Vector3, t: number[]): number[] {
     const [A, B, C] = params;
-    return tK.map((t) => A - B / (t + C));
+    return t.map((value) => A - B / (value + C));
   }
 
   /**
    * NOTE: Build residual vector either in log-pressure space or pressure space.
    * @param params Antoine parameter tuple `[A, B, C]`.
-   * @param tK Temperature values in regression temperature units.
-   * @param pPa Pressure values in regression pressure units.
+   * @param t Temperature values in regression temperature units.
+   * @param p Pressure values in regression pressure units.
    * @param base Logarithm base.
    * @param fitInLogSpace Whether residuals are computed in log space.
    * @returns Residual vector.
    */
   private static makeResidualBase(
     params: Vector3,
-    tK: number[],
-    pPa: number[],
+    t: number[],
+    p: number[],
     base: AntoineBase,
     fitInLogSpace: boolean,
   ): number[] {
-    const yHat = Antoine.modelLog(params, tK);
+    // calculate predicted logP and convert to residuals in the appropriate domain
+    const yHat = Antoine.modelLog(params, t);
+
+    // if fitInLogSpace, residuals are logP_pred - logP_exp; else residuals are P_pred - P_exp
     if (fitInLogSpace) {
-      return yHat.map((v, i) => v - (base === "log10" ? Math.log10(pPa[i]) : Math.log(pPa[i])));
+      return yHat.map((v, i) => v - (base === "log10" ? Math.log10(p[i]) : Math.log(p[i])));
     }
+
+    // convert predicted logP to P and calculate residuals in pressure space
     const pHat = yHat.map((v) => (base === "log10" ? 10 ** v : Math.exp(v)));
-    return pHat.map((v, i) => v - pPa[i]);
+
+    // return residuals in pressure space
+    return pHat.map((v, i) => v - p[i]);
   }
 
   /**
@@ -193,7 +201,10 @@ export class Antoine {
     PData: number[],
     options: FitAntoineOptions | EstimateCoefficientsOptions = {},
   ): AntoineFitResult {
+    // NOTE: resolve and validate options; if resolution fails, return failure result
     const resolved = resolveFitOptions(options);
+
+    // NOTE: extract resolved options and set up result object with defaults
     const {
       regressionTemperatureUnit,
       regressionPressureUnit,
@@ -210,8 +221,11 @@ export class Antoine {
     } = resolved;
     const out = emptyResult(base, loss, regressionTemperatureUnit, regressionPressureUnit, fitInLogSpace);
 
+    // SECTION: validate and normalize input data; if any checks fail, return failure result
     const T = [...TData].map((x) => Number(x));
     const P = [...PData].map((x) => Number(x));
+
+    // NOTE: basic validation of input data; if any checks fail, return failure result
     if (T.length !== P.length || T.length < 3 || !finiteArray(T) || !finiteArray(P)) {
       out.message = "TData and PData must have same length and at least 3 finite points.";
       return out;
@@ -366,10 +380,14 @@ export class Antoine {
       maeP,
       cov,
       warnings,
-      Tmin_K: Math.min(...tReg.map((v) => toKelvin(v, regressionTemperatureUnit))),
-      Tmax_K: Math.max(...tReg.map((v) => toKelvin(v, regressionTemperatureUnit))),
-      TminK: Math.min(...tReg.map((v) => toKelvin(v, regressionTemperatureUnit))),
-      TmaxK: Math.max(...tReg.map((v) => toKelvin(v, regressionTemperatureUnit))),
+      Tmin: {
+        value: Math.min(...tReg),
+        unit: regressionTemperatureUnit,
+      },
+      Tmax: {
+        value: Math.max(...tReg),
+        unit: regressionTemperatureUnit,
+      },
       loss,
       f_scale: fScale,
       fScale,
@@ -415,7 +433,7 @@ export class Antoine {
     if (residualDomain === "log") {
       r = yHat.map((v, i) => v - y[i]);
     } else if (residualDomain === "p") {
-      r = pHat.map((v, i) => v - pPa[i]);
+      r = pHat.map((v, i) => v - pReg[i]);
     } else {
       return [];
     }
@@ -480,7 +498,7 @@ export class Antoine {
         const pVal = Number(cols[presIdx]);
         if (!Number.isFinite(tVal) || !Number.isFinite(pVal)) return { temperaturesK: [], pressuresPa: [] };
         temperaturesK.push(toKelvin(tVal, TUnit));
-        pressuresPa.push(toPa(pVal, PUnit));
+        pressuresPa.push(convertUnit(pVal, PUnit, "Pa"));
       }
 
       if (!finiteArray(temperaturesK) || !finiteArray(pressuresPa)) return { temperaturesK: [], pressuresPa: [] };
@@ -507,7 +525,7 @@ export class Antoine {
     B: number,
     C: number,
     base: AntoineBase = "log10",
-    pressureUnit: RegressionPressureUnit = "Pa",
+    pressureUnit: RegressionPressureUnit,
   ): Pressure | null {
     if (![TValue, A, B, C].every((v) => Number.isFinite(v))) return null;
     if (base !== "log10" && base !== "ln") return null;

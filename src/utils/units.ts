@@ -5,7 +5,7 @@ import type {
   RegressionPressureUnit,
   RegressionTemperatureUnit,
   TemperatureUnit,
-} from "../types/antoine";
+} from "@/types/antoine";
 
 const convertFromToFn: (value: number, fromUnit: string, toUnit: string) => number = (() => {
   const mod = mozicuc as unknown as {

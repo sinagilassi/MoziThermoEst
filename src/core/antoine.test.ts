@@ -23,7 +23,12 @@ describe("Antoine core", () => {
       3392.900018, 5738.327528, 9332.604721, 14657.31121, 22310.8695, 33018.32269, 47638.5333, 67168.53995, 92744.96477,
       125642.5053, 167269.663, 219161.9542,
     ];
-    const res = Antoine.fitAntoine(temperatures, pressures, { base: "log10", loss: "soft_l1" });
+    const res = Antoine.fitAntoine(temperatures, pressures, {
+      base: "log10",
+      loss: "soft_l1",
+      regression_temperature_unit: "K",
+      regression_pressure_unit: "Pa",
+    });
     expect(res.A).not.toBeNull();
     expect(res.B).not.toBeNull();
     expect(res.C).not.toBeNull();
@@ -51,6 +56,8 @@ describe("Antoine core", () => {
       base: "log10",
       fitInLogSpace: true,
       maxNfev: 2000,
+      regression_temperature_unit: "K",
+      regression_pressure_unit: "Pa",
     });
     expect(res.A).not.toBeNull();
     expect(res.B).not.toBeNull();
@@ -78,8 +85,16 @@ describe("Antoine core", () => {
     const noisy = [...syn.P];
     noisy[3] *= 8;
 
-    const linear = Antoine.fitAntoine(syn.T, noisy, { loss: "linear" });
-    const robust = Antoine.fitAntoine(syn.T, noisy, { loss: "soft_l1" });
+    const linear = Antoine.fitAntoine(syn.T, noisy, {
+      loss: "linear",
+      regression_temperature_unit: "K",
+      regression_pressure_unit: "Pa",
+    });
+    const robust = Antoine.fitAntoine(syn.T, noisy, {
+      loss: "soft_l1",
+      regression_temperature_unit: "K",
+      regression_pressure_unit: "Pa",
+    });
 
     expect(linear.A).not.toBeNull();
     expect(robust.A).not.toBeNull();
@@ -90,6 +105,8 @@ describe("Antoine core", () => {
     const syn = makeSyntheticData();
     const res = Antoine.fitAntoine(syn.T, syn.P, {
       bounds: [[9.5, 2000, -100], [10.5, 3000, 0]],
+      regression_temperature_unit: "K",
+      regression_pressure_unit: "Pa",
     });
     expect((res.A as number) >= 9.5).toBe(true);
     expect((res.A as number) <= 10.5).toBe(true);
@@ -99,7 +116,11 @@ describe("Antoine core", () => {
 
   it("outlier report returns ranked items", () => {
     const syn = makeSyntheticData();
-    const fit = Antoine.fitAntoine(syn.T, syn.P, { loss: "soft_l1" });
+    const fit = Antoine.fitAntoine(syn.T, syn.P, {
+      loss: "soft_l1",
+      regression_temperature_unit: "K",
+      regression_pressure_unit: "Pa",
+    });
     const outliers = Antoine.outlierReport(syn.T, syn.P, fit, { topN: 3 });
     expect(outliers.length).toBe(3);
     expect(outliers[0]).toHaveProperty("index");
@@ -131,7 +152,10 @@ describe("Antoine docs wrappers", () => {
     const syn = makeSyntheticData();
     const Ts: Temperature[] = syn.T.map((v) => ({ value: v, unit: "K" }));
     const Ps: Pressure[] = syn.P.map((v) => ({ value: v, unit: "Pa" }));
-    const res = estimateCoefficients(Ts, Ps);
+    const res = estimateCoefficients(Ts, Ps, {
+      regression_temperature_unit: "K",
+      regression_pressure_unit: "Pa",
+    });
     expect(res).not.toBeNull();
     expect((res as { A: number | null }).A).not.toBeNull();
   });
@@ -155,7 +179,10 @@ describe("Antoine docs wrappers", () => {
     const syn = makeSyntheticData();
     const Ts: Temperature[] = syn.T.map((v) => ({ value: v, unit: "K" }));
     const Ps: Pressure[] = syn.P.map((v) => ({ value: v, unit: "Pa" }));
-    const fit = estimateCoefficients(Ts, Ps);
+    const fit = estimateCoefficients(Ts, Ps, {
+      regression_temperature_unit: "K",
+      regression_pressure_unit: "Pa",
+    });
     expect(fit).not.toBeNull();
     expect(() =>
       calcVaporPressure(

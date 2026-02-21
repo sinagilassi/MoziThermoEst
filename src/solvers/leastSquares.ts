@@ -1,5 +1,5 @@
-import type { AntoineLoss } from "../types/antoine";
-import { clamp, finiteArray, vecNorm2 } from "../utils/tools";
+import type { AntoineLoss } from "@/types/antoine";
+import { clamp, finiteArray, vecNorm2 } from "@/utils/tools";
 import { robustWeight } from "./robust";
 
 export type Vector3 = [number, number, number];
