@@ -5,7 +5,7 @@ import type {
   RegressionPressureUnit,
   RegressionTemperatureUnit,
   TemperatureUnit,
-} from "@/types/antoine";
+} from "../types/antoine";
 
 const convertFromToFn: (value: number, fromUnit: string, toUnit: string) => number = (() => {
   const mod = mozicuc as unknown as {
@@ -29,19 +29,37 @@ export function convertUnit(value: number, fromUnit: string, toUnit: string): nu
 }
 
 /**
- * Convert temperature to Kelvin.
- * @param value Temperature value.
- * @param unit Temperature unit.
+ * Convert typed temperature to Kelvin.
+ * @param temperature Temperature object.
  * @returns Temperature in Kelvin.
  */
-export function toKelvin(value: number, unit: TemperatureUnit): number {
+export function toKelvin(temperature: Temperature): number {
+  return convertFromToFn(temperature.value, temperature.unit, "K");
+}
+
+/**
+ * Compatibility helper for numeric temperature conversion.
+ * @param value Temperature value.
+ * @param unit Source temperature unit.
+ * @returns Temperature in Kelvin.
+ */
+export function toKelvinValue(value: number, unit: TemperatureUnit): number {
   return convertFromToFn(value, unit, "K");
 }
 
 /**
- * Convert pressure to Pascal.
+ * Convert typed pressure to Pascal.
+ * @param pressure Pressure object.
+ * @returns Pressure in Pascal.
+ */
+export function toPascal(pressure: Pressure): number {
+  return convertFromToFn(pressure.value, pressure.unit, "Pa");
+}
+
+/**
+ * Compatibility helper for numeric pressure conversion.
  * @param value Pressure value.
- * @param unit Pressure unit.
+ * @param unit Source pressure unit.
  * @returns Pressure in Pascal.
  */
 export function toPa(value: number, unit: PressureUnit): number {
@@ -54,8 +72,15 @@ export function toPa(value: number, unit: PressureUnit): number {
  * @param unit Target pressure unit.
  * @returns Converted pressure.
  */
-export function fromPa(value: number, unit: PressureUnit): number {
+export function fromPascal(value: number, unit: PressureUnit): number {
   return convertFromToFn(value, "Pa", unit);
+}
+
+/**
+ * Compatibility helper alias for pressure conversion from Pa.
+ */
+export function fromPa(value: number, unit: PressureUnit): number {
+  return fromPascal(value, unit);
 }
 
 /**
