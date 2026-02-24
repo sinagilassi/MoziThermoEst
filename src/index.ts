@@ -16,7 +16,24 @@ export type {
   RegressionTemperatureUnit,
   TemperatureUnit,
 } from "./types/antoine";
+export type {
+  GroupUnit,
+  JobackAliasContributionMap,
+  JobackCalcProp,
+  JobackCategoryMap,
+  JobackEstimatedProperties,
+  JobackGroupCanonicalAlias,
+  JobackGroupContributionFields,
+  JobackGroupFieldName,
+  JobackGroupInfoItem,
+  JobackInputGroups,
+  JobackProp,
+  JobackSigma,
+  JobackTableRow,
+  JobackValidGroupData,
+} from "./types/jb";
 export { Antoine, AntoineError, calcVaporPressure, calcVaporPressureWithUnits, fitAntoine, loadExperimentalData } from "./core/antoine";
+export { Joback, JobackError, calcJoback, calcJobackHeatCapacity, calcJobackProperties, listAvailableJobackGroups, loadJobackTable } from "./core/joback";
 export {
   calcVaporPressure as calcVaporPressureLegacy,
   calcVaporPressureWithUnits as calcVaporPressureWithUnitsLegacy,
@@ -24,3 +41,19 @@ export {
   estimateCoefficientsFromExperimentalData,
   fitAntoine as fitAntoineFromTypedInputs,
 } from "./docs/antoine";
+export {
+  jobackCalc,
+  jobackHeatCapacityCalc,
+  jobackPropCalc,
+  jobackGroupContributionCategory,
+  jobackGroupContributionIds,
+  jobackGroupContributionInfo,
+  jobackGroupContributionNames,
+  joback_calc,
+  joback_group_contribution_category,
+  joback_group_contribution_ids,
+  joback_group_contribution_info,
+  joback_group_contribution_names,
+  joback_heat_capacity_calc,
+  joback_prop_calc,
+} from "./docs/joback";
