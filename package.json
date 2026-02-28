@@ -1,6 +1,6 @@
 {
   "name": "mozithermoest",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "MoziThermoEst is a toolkit for estimating thermodynamic properties.",
   "homepage": "https://github.com/sinagilassi/MoziThermoEst#readme",
   "bugs": {
@@ -29,7 +29,9 @@
     "dist"
   ],
   "scripts": {
-    "build": "rollup -c",
+    "build": "rollup -c --environment BUILD:production",
+    "build:prod": "rollup -c --environment BUILD:production",
+    "build:dev": "rollup -c --environment BUILD:development",
     "test": "npm run build && node --no-deprecation node_modules/vitest/vitest.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --ext .ts",

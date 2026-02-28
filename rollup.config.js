@@ -5,6 +5,8 @@ import dts from "rollup-plugin-dts";
 import tsconfigPaths from "rollup-plugin-tsconfig-paths";
 import pkg from "./package.json" with { type: "json" };
 
+const isProduction = (process.env.BUILD ?? "production") === "production";
+
 const externalDeps = new Set([
     ...Object.keys(pkg.dependencies ?? {}),
     ...Object.keys(pkg.peerDependencies ?? {}),
@@ -32,36 +34,62 @@ const jsPlugins = [
         tsconfig: "./tsconfig.json",
         declaration: false,
         declarationMap: false,
+        sourceMap: !isProduction,
     }),
 ];
+
+const onwarn = (warning, warn) => {
+    if (warning.code === "CIRCULAR_DEPENDENCY") {
+        throw new Error(`Circular dependency detected: ${warning.message}`);
+    }
+    warn(warning);
+};
+
+const baseOutput = {
+    sourcemap: !isProduction,
+    compact: isProduction,
+    minifyInternalExports: isProduction,
+    generatedCode: {
+        arrowFunctions: true,
+        constBindings: true,
+        objectShorthand: true,
+    },
+};
 
 export default [
     {
         input: "src/index.ts",
         external: isExternal,
+        onwarn,
         plugins: jsPlugins,
+        treeshake: {
+            moduleSideEffects: false,
+            propertyReadSideEffects: false,
+            tryCatchDeoptimization: false,
+        },
         output: [
             {
+                ...baseOutput,
                 file: "dist/index.mjs",
                 format: "es",
-                sourcemap: true,
             },
             {
+                ...baseOutput,
                 file: "dist/index.cjs",
                 format: "cjs",
                 exports: "named",
-                sourcemap: true,
             },
             {
+                ...baseOutput,
                 file: "dist/index.browser.mjs",
                 format: "es",
-                sourcemap: true,
             },
         ],
     },
     {
         input: "src/index.ts",
         external: isExternal,
+        onwarn,
         plugins: [tsconfigPaths(), dts({ tsconfig: "./tsconfig.json" })],
         output: {
             file: "dist/index.d.ts",
