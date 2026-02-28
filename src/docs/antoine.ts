@@ -54,21 +54,32 @@ function mapEstimateOptions(options: EstimateOptions) {
  * @param pressures - Experimental pressures with explicit units.
  * @param options - Optional solver and robustness configuration.
  * @returns A compatibility fit report when estimation succeeds, otherwise `null`.
+ *
+ * Notes:
+ * - Temperature and pressure values are converted to `Kelvin` and `Pascal`, respectively, before fitting.
  */
 export function estimateCoefficients(
   temperatures: Temperature[],
   pressures: Pressure[],
   options: EstimateOptions = {},
 ): AntoineFitResultCompat | null {
+  // SECTION: Input validation
+  // NOTE: check temperature and pressure values and units
   if (!Array.isArray(temperatures) || !Array.isArray(pressures)) return null;
   if (temperatures.length !== pressures.length || temperatures.length < 3) return null;
   if (!temperatures.every((t) => isFiniteNumber(t?.value) && typeof t?.unit === "string")) return null;
   if (!pressures.every((p) => isFiniteNumber(p?.value) && typeof p?.unit === "string")) return null;
 
+  // SECTION: Normalization
+  // NOTE: temperature to Kelvin [K]
   const tK = normalizeTemperatures(temperatures);
+  // NOTE: pressure to Pascal [Pa]
   const pPa = normalizePressures(pressures);
+
+  // >> check normalization success
   if (!tK || !pPa) return null;
 
+  // SECTION: Fitting
   const report = Antoine.fitAntoine(tK, pPa, {
     base: options.base,
     fitInLogSpace: options.fitInLogSpace,
@@ -81,6 +92,8 @@ export function estimateCoefficients(
     loss: options.loss,
     fScale: options.fScale,
   });
+
+  // res
   return report.success || report.A !== null ? report : null;
 }
 
@@ -100,11 +113,17 @@ export function estimateCoefficientsFromExperimentalData(
   experimentalData: string,
   options: EstimateFromFileOptions = {},
 ): AntoineFitResultCompat | null {
+  // SECTION: Determine source units with defaults
+  // NOTE: default to Kelvin for temperature and Pascal for pressure if not provided
   const temperatureUnit = options.temperatureUnit ?? "K";
   const pressureUnit = options.pressureUnit ?? "Pa";
 
+  // SECTION: Load, normalize, and fit
   try {
+    // NOTE: load data
     const loaded = loadExperimentalData(experimentalData, temperatureUnit, pressureUnit);
+
+    // NOTE: fitting with the canonical routine, which expects Kelvin and Pascal
     const compat = Antoine.fitAntoine(loaded.temperaturesK, loaded.pressuresPa, {
       base: options.base,
       TUnit: "K",
@@ -119,6 +138,8 @@ export function estimateCoefficientsFromExperimentalData(
       loss: options.loss,
       fScale: options.fScale,
     });
+
+    // res
     return compat.success || compat.A !== null ? compat : null;
   } catch {
     return null;
@@ -146,16 +167,26 @@ export function calcVaporPressure(
   C: number,
   options: CalcVaporPressureOptions = {},
 ): Pressure | null {
+  // SECTION: Input validation
+  // NOTE: check temperature
   if (!temperature || !isFiniteNumber(temperature.value) || typeof temperature.unit !== "string") return null;
+  // NOTE: check coefficients
   if (![A, B, C].every((value) => Number.isFinite(value))) return null;
 
+  // SECTION: Calculation with graceful failure
   try {
     const base = options.base ?? "log10";
     const pressureUnit = options.pressureUnit ?? "Pa";
+
+    // NOTE: calculate vapor pressure in Pascal using the canonical routine, then convert to the requested unit
     const calculated = calcVaporPressureCanonical(temperature, A, B, C, base);
+
+    // >> set output pressure with unit conversion as needed
+    const vaporPressure = pressureUnit === "Pa" ? calculated.vapor_pressure_Pa : fromPascal(calculated.vapor_pressure_Pa, pressureUnit);
+
+    // res
     return {
-      value:
-        pressureUnit === "Pa" ? calculated.vapor_pressure_Pa : fromPascal(calculated.vapor_pressure_Pa, pressureUnit),
+      value: vaporPressure,
       unit: pressureUnit,
     };
   } catch {
@@ -203,10 +234,29 @@ export function calcVaporPressureWithUnits(
  * @throws Error When typed arrays cannot be normalized to canonical units.
  */
 export function fitAntoine(temperatures: Temperature[], pressures: Pressure[], options: EstimateOptions = {}) {
+  // SECTION: Input validation
+  if (!Array.isArray(temperatures) || !Array.isArray(pressures)) {
+    throw new Error("Temperatures and pressures must be arrays.");
+  }
+  if (temperatures.length !== pressures.length || temperatures.length < 3) {
+    throw new Error("Temperature and pressure arrays must have the same length and contain at least three points.");
+  }
+  if (!temperatures.every((t) => isFiniteNumber(t?.value) && typeof t?.unit === "string")) {
+    throw new Error("Each temperature must have a finite numeric value and a string unit.");
+  }
+  if (!pressures.every((p) => isFiniteNumber(p?.value) && typeof p?.unit === "string")) {
+    throw new Error("Each pressure must have a finite numeric value and a string unit.");
+  }
+
+  // SECTION: Normalization to canonical units (Kelvin and Pascal)
   const tK = normalizeTemperatures(temperatures);
   const pPa = normalizePressures(pressures);
+
+  // >> check normalization success
   if (!tK || !pPa) {
     throw new Error("Failed to normalize typed temperature/pressure arrays.");
   }
+
+  // SECTION: Fit with the canonical routine using mapped options
   return fitAntoineCanonical(tK, pPa, mapEstimateOptions(options));
 }

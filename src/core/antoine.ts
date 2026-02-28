@@ -434,21 +434,37 @@ export function calcVaporPressure(
   C: number,
   base: AntoineBase = "log10",
 ): CalcVaporPressureResult {
+  // SECTION: Input validation
+  // NOTE: check coefficients
   if (![A, B, C].every((v) => Number.isFinite(v))) {
     throw new AntoineError("A, B and C must be finite.");
   }
+
+  // SECTION: Calculation with error handling
+  // NOTE: perform calculation in canonical units, then convert output to requested unit
   if (base !== "log10" && base !== "ln") {
     throw new AntoineError("base must be 'log10' or 'ln'.");
   }
+
+  // NOTE: convert input temperature to Kelvin
   const temperatureK = toKelvin(temperature);
+  // >> check
   if (!Number.isFinite(temperatureK)) {
     throw new AntoineError("Temperature conversion failed.");
   }
+
+  // NOTE: calculate vapor pressure in Pascal
   const logP = A - B / (temperatureK + C);
+
+  // calculate pressure in Pascal
   const pressurePa = base === "log10" ? 10 ** logP : Math.exp(logP);
+
+  // >> check output pressure validity
   if (!Number.isFinite(pressurePa) || pressurePa <= 0) {
     throw new AntoineError("Calculated vapor pressure is invalid.");
   }
+
+  // res
   return {
     temperature_K: temperatureK,
     vapor_pressure_Pa: pressurePa,
