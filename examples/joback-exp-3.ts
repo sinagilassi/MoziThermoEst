@@ -1,4 +1,4 @@
-import { joback_heat_capacity_calc, joback_prop_calc } from "../src/index";
+import { DEFAULT_JOBACK_TABLE, createJobackDocs, joback_heat_capacity_calc, joback_prop_calc } from "../src/index";
 
 console.log("=== Joback properties-only and heat-capacity-only (Python exp-3 parity) ===");
 
@@ -22,3 +22,15 @@ if (heatCapacity?.value) {
   console.log(`Heat capacity at 300 K: ${cp300} ${heatCapacity.unit}`);
 }
 
+const modifiedTable = DEFAULT_JOBACK_TABLE.map((row) => ({ ...row }));
+modifiedTable[20].a += 5;
+const injectedDocs = createJobackDocs(modifiedTable);
+const injectedHeatCapacity = injectedDocs.jobackHeatCapacityCalc(groups, 18);
+
+if (heatCapacity?.value && injectedHeatCapacity?.value) {
+  console.log("\nDocs factory with injected table (modified -OH @phenol a by +5):");
+  console.log({
+    default_cp_300: heatCapacity.value(300),
+    injected_cp_300: injectedHeatCapacity.value(300),
+  });
+}

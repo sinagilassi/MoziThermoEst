@@ -5,10 +5,12 @@ import {
   calcJoback,
   calcJobackHeatCapacity,
   calcJobackProperties,
+  createJobackCalculator,
   listAvailableJobackGroups,
   loadJobackTable,
 } from "./joback";
 import {
+  createJobackDocs,
   jobackCalc,
   jobackGroupContributionCategory,
   jobackGroupContributionIds,
@@ -17,9 +19,10 @@ import {
   jobackHeatCapacityCalc,
   jobackPropCalc,
 } from "../docs/joback";
+import { DEFAULT_JOBACK_TABLE } from "../data/joback.table";
 
 describe("Joback canonical API", () => {
-  it("parses the Joback CSV into 41 rows", () => {
+  it("loads the default bundled Joback table into 41 rows", () => {
     const rows = loadJobackTable();
     expect(rows).toHaveLength(41);
     expect(rows[0]).toHaveProperty("Tc");
@@ -129,6 +132,53 @@ describe("Joback canonical API", () => {
   });
 });
 
+describe("Joback injected-data calculators", () => {
+  it("matches default results when initialized with the same table", () => {
+    const calculator = createJobackCalculator(DEFAULT_JOBACK_TABLE);
+    const sample = { "-CH3": 2, "=CH- @ring": 3, "=C< @ring": 3, "-OH @phenol": 1 } as const;
+    const byDefault = calcJoback(sample, 18);
+    const byInjected = calculator.calcJoback(sample, 18);
+
+    expect(byInjected.boiling_point_temperature.value).toBeCloseTo(byDefault.boiling_point_temperature.value as number, 12);
+    expect(byInjected.critical_pressure.value).toBeCloseTo(byDefault.critical_pressure.value as number, 12);
+    expect((byInjected.heat_capacity.value as (T: number) => number)(300)).toBeCloseTo(
+      (byDefault.heat_capacity.value as (T: number) => number)(300),
+      12,
+    );
+  });
+
+  it("is not affected by mutations to the caller's input data array", () => {
+    const mutable = DEFAULT_JOBACK_TABLE.map((row) => ({ ...row }));
+    const calculator = createJobackCalculator(mutable);
+    mutable[0].Tb = 999999;
+
+    const result = calculator.calcJoback({ "-CH3": 1 }, 5);
+    const defaultResult = calcJoback({ "-CH3": 1 }, 5);
+    expect(result.boiling_point_temperature.value).toBeCloseTo(defaultResult.boiling_point_temperature.value as number, 12);
+  });
+
+  it("validates injected tables and throws on malformed data", () => {
+    const tooShort = DEFAULT_JOBACK_TABLE.slice(0, 40);
+    expect(() => createJobackCalculator(tooShort)).toThrow(JobackError);
+
+    const withDuplicate = DEFAULT_JOBACK_TABLE.map((row) => ({ ...row }));
+    withDuplicate[1].group = withDuplicate[0].group;
+    expect(() => createJobackCalculator(withDuplicate)).toThrow(JobackError);
+
+    const withNaN = DEFAULT_JOBACK_TABLE.map((row) => ({ ...row }));
+    withNaN[0].Tb = Number.NaN;
+    expect(() => createJobackCalculator(withNaN)).toThrow(JobackError);
+  });
+
+  it("supports Joback.fromData for class-level calibration", () => {
+    const DataBoundJoback = Joback.fromData(DEFAULT_JOBACK_TABLE);
+    const instance = new DataBoundJoback({ "-CH3": 2, "-CH2- @non-ring": 1 }, 8);
+    const legacy = new Joback({ "-CH3": 2, "-CH2- @non-ring": 1 }, 8);
+
+    expect(instance.calc().boiling_point_temperature.value).toBeCloseTo(legacy.calc().boiling_point_temperature.value as number, 12);
+  });
+});
+
 describe("Joback docs compatibility wrappers", () => {
   it("returns group info/name/id arrays with 41 items", () => {
     const [names, ids] = jobackGroupContributionInfo();
@@ -150,5 +200,15 @@ describe("Joback docs compatibility wrappers", () => {
     expect(jobackPropCalc({ bad_key: 1 }, 5)).toBeNull();
     expect(jobackHeatCapacityCalc({ bad_key: 1 }, 5)).toBeNull();
   });
-});
 
+  it("supports data-calibrated docs wrappers via createJobackDocs", () => {
+    const docs = createJobackDocs(DEFAULT_JOBACK_TABLE);
+    const sample = { "-CH3": 2, "=CH- @ring": 3, "=C< @ring": 3, "-OH @phenol": 1 } as const;
+    const expected = calcJoback(sample, 18);
+    const actual = docs.jobackCalc(sample, 18);
+
+    expect(actual).not.toBeNull();
+    expect(actual?.boiling_point_temperature.value).toBeCloseTo(expected.boiling_point_temperature.value as number, 12);
+    expect(docs.jobackCalc({ bad_key: 1 }, 5)).toBeNull();
+  });
+});

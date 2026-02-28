@@ -30,7 +30,6 @@
   ],
   "scripts": {
     "build": "rollup -c",
-    "postbuild": "node -e \"const fs=require('node:fs'); fs.mkdirSync('dist/data',{recursive:true}); fs.copyFileSync('src/data/joback.csv','dist/data/joback.csv');\"",
     "test": "npm run build && node --no-deprecation node_modules/vitest/vitest.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --ext .ts",

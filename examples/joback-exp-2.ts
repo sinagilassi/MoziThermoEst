@@ -1,5 +1,5 @@
 import type { JobackGroupContributionFields } from "../src/index";
-import { joback_calc } from "../src/index";
+import { DEFAULT_JOBACK_TABLE, Joback, joback_calc } from "../src/index";
 
 console.log("=== Joback full property calculation (Python exp-2 parity) ===");
 
@@ -37,3 +37,14 @@ if (result?.heat_capacity.value) {
   console.log(`Heat capacity at 273 K: ${cp273} ${result.heat_capacity.unit}`);
 }
 
+const modifiedTable = DEFAULT_JOBACK_TABLE.map((row) => ({ ...row }));
+modifiedTable[0].Tc += 0.01;
+const InjectedJoback = Joback.fromData(modifiedTable);
+const injectedInstance = new InjectedJoback(groups, 18);
+const injectedResult = injectedInstance.calc();
+
+console.log("\nClass API with injected table (modified -CH3 Tc by +0.01):");
+console.log({
+  default_critical_temperature: result?.critical_temperature,
+  injected_critical_temperature: injectedResult.critical_temperature,
+});

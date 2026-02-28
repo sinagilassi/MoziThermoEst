@@ -1,5 +1,5 @@
 import type { JobackGroupContributionFields } from "../src/index";
-import { calcJoback } from "../src/index";
+import { DEFAULT_JOBACK_TABLE, calcJoback, createJobackCalculator } from "../src/index";
 
 console.log("=== Example Joback Group Contributions Usage ===");
 
@@ -26,3 +26,13 @@ console.log({
   critical_pressure: quickResult.critical_pressure,
 });
 
+const modifiedTable = DEFAULT_JOBACK_TABLE.map((row) => ({ ...row }));
+modifiedTable[0].Tb += 10;
+const injected = createJobackCalculator(modifiedTable);
+const injectedResult = injected.calcJoback({ "-CH3": 2, "-CH2- @non-ring": 1 }, 8);
+
+console.log("\nInjected-data calculation (modified -CH3 Tb by +10):");
+console.log({
+  default_boiling_point_temperature: quickResult.boiling_point_temperature,
+  injected_boiling_point_temperature: injectedResult.boiling_point_temperature,
+});
