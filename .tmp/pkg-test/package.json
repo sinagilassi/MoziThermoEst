@@ -4,13 +4,17 @@
     "description": "",
     "main": "index.js",
     "scripts": {
-        "test": "echo \"Error: no test specified\" && exit 1"
+        "test": "echo \"Error: no test specified\" && exit 1",
+        "exp:joback:default": "node --experimental-transform-types exps/joback-default.ts",
+        "exp:joback:injected": "node --experimental-transform-types exps/joback-injected.ts",
+        "exp:joback:docs": "node --experimental-transform-types exps/joback-docs.ts",
+        "exp:all": "npm run exp:joback:default && npm run exp:joback:injected && npm run exp:joback:docs"
     },
     "keywords": [],
     "author": "",
     "license": "ISC",
     "type": "commonjs",
     "dependencies": {
-        "mozithermocalcdb-nasa": "file:../../mozithermoest-1.0.0.tgz"
+        "mozithermoest": "file:../../mozithermoest-0.1.0.tgz"
     }
 }
