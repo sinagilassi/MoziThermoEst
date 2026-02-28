@@ -26,26 +26,68 @@ const DEFAULT_BOUNDS: [[number, number, number], [number, number, number]] = [
 const EPS = 1e-12;
 
 export class AntoineError extends Error {
+  /**
+   * Creates a domain-specific Antoine error.
+   *
+   * @param message - Human-readable explanation of the failure.
+   */
   constructor(message: string) {
     super(message);
     this.name = "AntoineError";
   }
 }
 
+/**
+ * Computes the arithmetic mean of numeric values.
+ *
+ * @param values - Numeric vector with at least one item.
+ * @returns Mean value of the input vector.
+ */
 const mean = (values: number[]): number => values.reduce((acc, value) => acc + value, 0) / values.length;
 
+/**
+ * Converts pressure values in Pascal to logarithmic target values.
+ *
+ * @param pressuresPa - Pressure observations in Pascal.
+ * @param base - Logarithm base used by the Antoine model.
+ * @returns Log-domain response vector used for fitting and metrics.
+ */
 const makeY = (pressuresPa: number[], base: AntoineBase): number[] =>
   pressuresPa.map((v) => (base === "log10" ? Math.log10(v) : Math.log(v)));
 
+/**
+ * Evaluates the Antoine equation in log-pressure form.
+ *
+ * @param params - Antoine parameter tuple `[A, B, C]`.
+ * @param tK - Temperature vector in Kelvin.
+ * @returns Predicted log-pressure values in the selected base domain.
+ */
 function modelLog(params: Vector3, tK: number[]): number[] {
   const [A, B, C] = params;
   return tK.map((t) => A - B / (t + C));
 }
 
+/**
+ * Converts modeled log-pressure values to pressure in Pascal.
+ *
+ * @param yHat - Predicted log-pressure values.
+ * @param base - Logarithm base used to encode `yHat`.
+ * @returns Pressure predictions in Pascal.
+ */
 function toPressure(yHat: number[], base: AntoineBase): number[] {
   return yHat.map((v) => (base === "log10" ? 10 ** v : Math.exp(v)));
 }
 
+/**
+ * Computes residuals in either log space or pressure space.
+ *
+ * @param params - Antoine parameter tuple `[A, B, C]`.
+ * @param tK - Temperature observations in Kelvin.
+ * @param pPa - Pressure observations in Pascal.
+ * @param base - Logarithm base used by the model.
+ * @param fitInLogSpace - Whether optimization residuals are defined in log domain.
+ * @returns Residual vector for least-squares minimization.
+ */
 function makeResidualBase(
   params: Vector3,
   tK: number[],
@@ -62,6 +104,15 @@ function makeResidualBase(
   return pHat.map((v, i) => v - pPa[i]);
 }
 
+/**
+ * Calculates model quality metrics in both log-pressure and pressure domains.
+ *
+ * @param y - Observed log-pressure values.
+ * @param yHat - Predicted log-pressure values.
+ * @param pPa - Observed pressures in Pascal.
+ * @param pHat - Predicted pressures in Pascal.
+ * @returns Aggregate error metrics including RMSE/MAE and $R^2$ in log space.
+ */
 function calcMetrics(y: number[], yHat: number[], pPa: number[], pHat: number[]) {
   const logRes = yHat.map((v, i) => v - y[i]);
   const pRes = pHat.map((v, i) => v - pPa[i]);
@@ -79,6 +130,13 @@ function calcMetrics(y: number[], yHat: number[], pPa: number[], pHat: number[])
   return { rmseLogP, maeLogP, rmseP, maeP, r2LogP };
 }
 
+/**
+ * Validates canonical input arrays prior to fitting.
+ *
+ * @param temperaturesK - Temperature data in Kelvin.
+ * @param pressuresPa - Pressure data in Pascal.
+ * @throws AntoineError When lengths mismatch, values are non-finite, or pressure is non-positive.
+ */
 function validateCanonicalInputs(temperaturesK: number[], pressuresPa: number[]): void {
   if (temperaturesK.length !== pressuresPa.length || temperaturesK.length < 3) {
     throw new AntoineError("TData and PData must have same length and at least 3 points.");
@@ -91,6 +149,18 @@ function validateCanonicalInputs(temperaturesK: number[], pressuresPa: number[])
   }
 }
 
+/**
+ * Resolves the initial parameter guess used by the nonlinear optimizer.
+ *
+ * If an explicit initial guess is supplied it is used as-is; otherwise a
+ * heuristic seed is generated from transformed data statistics.
+ *
+ * @param tK - Temperature data in Kelvin.
+ * @param y - Log-pressure target values.
+ * @param x0 - Optional user-provided initial guess.
+ * @param minMarginKelvin - Minimum allowed denominator margin for `T + C`.
+ * @returns Initial parameter vector `[A0, B0, C0]`.
+ */
 function resolveInitialGuess(
   tK: number[],
   y: number[],
@@ -124,6 +194,15 @@ function resolveInitialGuess(
   return [A0, B0, C0];
 }
 
+/**
+ * Resolves robust-loss scale used for weighted residual handling.
+ *
+ * @param loss - Selected robust loss function.
+ * @param fitInLogSpace - Whether optimization runs in log domain.
+ * @param pPa - Observed pressures in Pascal.
+ * @param userFScale - Optional user-provided scale override.
+ * @returns Positive scale value suitable for robust weighting.
+ */
 function resolveFScale(loss: AntoineLoss, fitInLogSpace: boolean, pPa: number[], userFScale?: number): number {
   if (userFScale !== undefined && userFScale !== null) return Math.max(userFScale, EPS);
   if (loss === "linear") return 1.0;
@@ -133,6 +212,16 @@ function resolveFScale(loss: AntoineLoss, fitInLogSpace: boolean, pPa: number[],
   return Math.max(1.0, med * 0.02);
 }
 
+/**
+ * Produces fit quality warnings based on physical and numerical heuristics.
+ *
+ * @param tK - Temperature data in Kelvin.
+ * @param pHat - Predicted pressures in Pascal.
+ * @param B - Antoine coefficient `B`.
+ * @param C - Antoine coefficient `C`.
+ * @param minMarginKelvin - Stability threshold for `T + C` denominator.
+ * @returns A list of warning messages; empty when no warning condition is met.
+ */
 function getWarnings(tK: number[], pHat: number[], B: number, C: number, minMarginKelvin: number): string[] {
   const warnings: string[] = [];
   const denomMin = Math.min(...tK.map((v) => v + C));
@@ -158,6 +247,14 @@ function getWarnings(tK: number[], pHat: number[], B: number, C: number, minMarg
   return warnings;
 }
 
+/**
+ * Approximates parameter covariance from weighted Jacobian information.
+ *
+ * @param cost - Final least-squares objective value.
+ * @param nData - Number of fitted observations.
+ * @param jacobianWeighted - Weighted Jacobian matrix from optimizer.
+ * @returns $3 \times 3$ covariance matrix, or `null` if inversion fails.
+ */
 function covarianceFromJacobian(cost: number, nData: number, jacobianWeighted: number[][]): number[][] | null {
   const jtJ = transposeMulSelf(jacobianWeighted);
   const inv = invert3x3(jtJ);
@@ -167,6 +264,12 @@ function covarianceFromJacobian(cost: number, nData: number, jacobianWeighted: n
   return inv.map((row) => row.map((v) => v * sigma2));
 }
 
+/**
+ * Converts canonical fit report fields to the legacy compatibility shape.
+ *
+ * @param report - Canonical Antoine fit report.
+ * @returns Backward-compatible report with duplicate camelCase aliases.
+ */
 function toCompatReport(report: AntoineFitReport): AntoineFitResultCompat {
   return {
     ...report,
@@ -184,6 +287,14 @@ function toCompatReport(report: AntoineFitReport): AntoineFitResultCompat {
   };
 }
 
+/**
+ * Builds a failed compatibility report populated with safe sentinel values.
+ *
+ * @param message - Failure message to expose to callers.
+ * @param base - Logarithm base associated with the attempted fit.
+ * @param loss - Loss function associated with the attempted fit.
+ * @returns Compatibility report indicating unsuccessful estimation.
+ */
 function failedCompat(message: string, base: AntoineBase, loss: AntoineLoss): AntoineFitResultCompat {
   return {
     A: null,
@@ -221,6 +332,19 @@ function failedCompat(message: string, base: AntoineBase, loss: AntoineLoss): An
   };
 }
 
+/**
+ * Fits Antoine coefficients from canonical SI-unit arrays.
+ *
+ * The routine validates inputs, prepares residuals in either log or pressure
+ * space, runs bounded nonlinear least squares with optional robust loss, and
+ * returns coefficients plus metrics and uncertainty estimates.
+ *
+ * @param TDataK - Temperature observations in Kelvin.
+ * @param PDataPa - Pressure observations in Pascal.
+ * @param options - Solver controls, bounds, weighting, and validation settings.
+ * @returns Canonical fit report containing coefficients, diagnostics, and metadata.
+ * @throws AntoineError When input validation or option constraints fail.
+ */
 export function fitAntoine(TDataK: number[], PDataPa: number[], options: FitAntoineOptions = {}): AntoineFitReport {
   const base = options.base ?? "log10";
   const fitInLogSpace = options.fit_in_log_space ?? true;
@@ -292,6 +416,17 @@ export function fitAntoine(TDataK: number[], PDataPa: number[], options: FitAnto
   };
 }
 
+/**
+ * Evaluates vapor pressure at a given temperature using Antoine coefficients.
+ *
+ * @param temperature - Temperature value with unit descriptor.
+ * @param A - Antoine coefficient `A`.
+ * @param B - Antoine coefficient `B`.
+ * @param C - Antoine coefficient `C`.
+ * @param base - Logarithm base used by the Antoine equation.
+ * @returns Vapor pressure result in Pascal with canonical temperature.
+ * @throws AntoineError When coefficients are invalid, conversion fails, or computed pressure is invalid.
+ */
 export function calcVaporPressure(
   temperature: Temperature,
   A: number,
@@ -320,6 +455,17 @@ export function calcVaporPressure(
   };
 }
 
+/**
+ * Evaluates Antoine vapor pressure and converts it to a target pressure unit.
+ *
+ * @param temperature - Temperature value with unit descriptor.
+ * @param A - Antoine coefficient `A`.
+ * @param B - Antoine coefficient `B`.
+ * @param C - Antoine coefficient `C`.
+ * @param pressureUnit - Desired output pressure unit.
+ * @param base - Logarithm base used by the Antoine equation.
+ * @returns Unit-aware vapor pressure result.
+ */
 export function calcVaporPressureWithUnits(
   temperature: Temperature,
   A: number,
@@ -336,6 +482,18 @@ export function calcVaporPressureWithUnits(
   };
 }
 
+/**
+ * Loads and validates experimental temperature/pressure data from CSV.
+ *
+ * CSV input must include `Temperature` and `Pressure` headers. Parsed values
+ * are converted to Kelvin and Pascal and validated for fitting suitability.
+ *
+ * @param experimentalDataPath - Path to CSV input file.
+ * @param temperatureUnit - Unit of temperature values in the CSV.
+ * @param pressureUnit - Unit of pressure values in the CSV.
+ * @returns Canonical arrays `{ temperaturesK, pressuresPa }`.
+ * @throws AntoineError When file format, parsing, or numeric validation fails.
+ */
 export function loadExperimentalData(
   experimentalDataPath: string,
   temperatureUnit: TemperatureUnit,
@@ -380,8 +538,22 @@ export function loadExperimentalData(
 
 /**
  * Compatibility class facade for legacy API consumers.
+ *
+ * Static methods in this class preserve old calling conventions and return
+ * nullable/fallback outputs instead of propagating low-level errors.
  */
 export class Antoine {
+  /**
+   * Legacy-compatible Antoine fitting entry point.
+   *
+   * Inputs are interpreted according to user-provided units and mapped to
+   * canonical options before delegating to the modern fitter.
+   *
+   * @param TData - Temperature observations in user-provided unit.
+   * @param PData - Pressure observations in user-provided unit.
+   * @param options - Legacy fitting options and unit declarations.
+   * @returns Compatibility fit report. On failure, returns an unsuccessful report with null coefficients.
+   */
   static fitAntoine(
     TData: number[],
     PData: number[],
@@ -426,6 +598,18 @@ export class Antoine {
     }
   }
 
+  /**
+   * Produces an outlier ranking from an existing Antoine fit.
+   *
+   * Residuals can be ranked in log-pressure or pressure domain and are sorted
+   * using robust weights and standardized residual magnitude.
+   *
+   * @param TData - Temperature observations in user-specified unit.
+   * @param PData - Pressure observations in user-specified unit.
+   * @param fitReport - Compatibility fit report containing valid coefficients.
+   * @param options - Unit declarations and ranking controls.
+   * @returns Ranked outlier report items; empty array if inputs are invalid or processing fails.
+   */
   static outlierReport(
     TData: number[],
     PData: number[],
@@ -482,6 +666,14 @@ export class Antoine {
     }
   }
 
+  /**
+   * Legacy-safe CSV loader that returns empty arrays instead of throwing.
+   *
+   * @param experimentalDataPath - Path to CSV input file.
+   * @param TUnit - Unit of temperature values in the CSV.
+   * @param PUnit - Unit of pressure values in the CSV.
+   * @returns Canonical arrays on success, otherwise empty arrays.
+   */
   static loadExperimentalData(
     experimentalDataPath: string,
     TUnit: TemperatureUnit,
@@ -494,6 +686,17 @@ export class Antoine {
     }
   }
 
+  /**
+   * Legacy pressure calculator returning Pascal pressure as typed object.
+   *
+   * @param TValue - Temperature scalar value.
+   * @param TUnit - Unit for `TValue`.
+   * @param A - Antoine coefficient `A`.
+   * @param B - Antoine coefficient `B`.
+   * @param C - Antoine coefficient `C`.
+   * @param base - Logarithm base used by the Antoine equation.
+   * @returns Pressure object in Pascal on success, otherwise `null`.
+   */
   static calc(
     TValue: number,
     TUnit: TemperatureUnit,
@@ -510,14 +713,33 @@ export class Antoine {
     }
   }
 
+  /**
+   * Converts pressure from Pascal to a target pressure unit.
+   *
+   * @param valuePa - Pressure value in Pascal.
+   * @param outputUnit - Desired output pressure unit.
+   * @returns Converted pressure value.
+   */
   static convertPressureFromPa(valuePa: number, outputUnit: PressureUnit): number {
     return fromPascal(valuePa, outputUnit);
   }
 
+  /**
+   * Converts typed pressure to Pascal.
+   *
+   * @param pressure - Typed pressure value.
+   * @returns Pressure in Pascal.
+   */
   static toPascal(pressure: Pressure): number {
     return toPascal(pressure);
   }
 
+  /**
+   * Converts typed temperature to Kelvin.
+   *
+   * @param temperature - Typed temperature value.
+   * @returns Temperature in Kelvin.
+   */
   static toKelvin(temperature: Temperature): number {
     return toKelvin(temperature);
   }

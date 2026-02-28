@@ -1,20 +1,32 @@
+// import libs
 import type { Pressure, Temperature } from "mozithermodb-settings";
+// ! LOCALS
 import {
   Antoine,
   calcVaporPressure as calcVaporPressureCanonical,
   calcVaporPressureWithUnits as calcVaporPressureWithUnitsCanonical,
   fitAntoine as fitAntoineCanonical,
   loadExperimentalData,
-} from "../core/antoine";
+} from "@/core/antoine";
 import type {
   AntoineFitResultCompat,
   CalcVaporPressureOptions,
   EstimateFromFileOptions,
   EstimateOptions,
-} from "../types/antoine";
-import { fromPascal, normalizePressures, normalizeTemperatures } from "../utils/units";
-import { isFiniteNumber } from "../utils/tools";
+} from "@/types/antoine";
+import { fromPascal, normalizePressures, normalizeTemperatures } from "@/utils/units";
+import { isFiniteNumber } from "@/utils/tools";
 
+/**
+ * Maps public camelCase estimate options to the canonical option shape
+ * expected by the core Antoine fitting implementation.
+ *
+ * This adapter is intentionally local to keep compatibility helpers in this
+ * module decoupled from internal naming conventions.
+ *
+ * @param options - Optional fitting controls provided by external callers.
+ * @returns Canonical fitting options object with snake_case keys where required.
+ */
 function mapEstimateOptions(options: EstimateOptions) {
   return {
     base: options.base,
@@ -32,8 +44,16 @@ function mapEstimateOptions(options: EstimateOptions) {
 }
 
 /**
- * Estimate Antoine coefficients from typed temperature/pressure arrays.
- * Returns null on validation or conversion failure for compatibility.
+ * Estimates Antoine coefficients from typed temperature and pressure arrays.
+ *
+ * Input values are normalized to Kelvin and Pascal before fitting. The function
+ * preserves legacy compatibility by returning `null` rather than throwing for
+ * common validation and unit-conversion failures.
+ *
+ * @param temperatures - Experimental temperatures with explicit units.
+ * @param pressures - Experimental pressures with explicit units.
+ * @param options - Optional solver and robustness configuration.
+ * @returns A compatibility fit report when estimation succeeds, otherwise `null`.
  */
 export function estimateCoefficients(
   temperatures: Temperature[],
@@ -65,8 +85,16 @@ export function estimateCoefficients(
 }
 
 /**
- * Estimate Antoine coefficients from experimental CSV file.
- * Returns null for compatibility on load/fit failure.
+ * Estimates Antoine coefficients from serialized experimental data.
+ *
+ * The input payload is parsed with the configured source units, converted to
+ * canonical SI units, and then fitted by the core Antoine routine. Exceptions
+ * from parsing, conversion, or fitting are swallowed to preserve the legacy
+ * contract of returning `null` on failure.
+ *
+ * @param experimentalData - Serialized experimental dataset (for example CSV text).
+ * @param options - Data-loading units and optional fitting configuration.
+ * @returns A compatibility fit report on success, otherwise `null`.
  */
 export function estimateCoefficientsFromExperimentalData(
   experimentalData: string,
@@ -98,7 +126,18 @@ export function estimateCoefficientsFromExperimentalData(
 }
 
 /**
- * Legacy-compatible vapor pressure calculator returning typed Pressure or null.
+ * Computes vapor pressure from Antoine coefficients for a single temperature.
+ *
+ * This wrapper provides strict argument validation and graceful failure for
+ * compatibility-focused consumers. The canonical calculation is performed in
+ * Pascal, then converted to the requested output pressure unit.
+ *
+ * @param temperature - Temperature value and unit used for evaluation.
+ * @param A - Antoine coefficient `A`.
+ * @param B - Antoine coefficient `B`.
+ * @param C - Antoine coefficient `C`.
+ * @param options - Logarithm base and desired output pressure unit.
+ * @returns A typed pressure result in the requested unit, or `null` if invalid input or calculation failure occurs.
  */
 export function calcVaporPressure(
   temperature: Temperature,
@@ -125,7 +164,18 @@ export function calcVaporPressure(
 }
 
 /**
- * Canonical typed wrapper returning converted unit plus canonical temperature.
+ * Canonical unit-aware Antoine vapor pressure calculator.
+ *
+ * Unlike the compatibility wrapper, this function delegates directly to the
+ * canonical implementation and surfaces its return structure, which includes
+ * converted pressure and canonicalized temperature details.
+ *
+ * @param temperature - Temperature value and unit to evaluate.
+ * @param A - Antoine coefficient `A`.
+ * @param B - Antoine coefficient `B`.
+ * @param C - Antoine coefficient `C`.
+ * @param options - Logarithm base and target pressure unit for conversion.
+ * @returns Canonical Antoine vapor pressure result with unit-aware fields.
  */
 export function calcVaporPressureWithUnits(
   temperature: Temperature,
@@ -140,7 +190,17 @@ export function calcVaporPressureWithUnits(
 }
 
 /**
- * Canonical fit wrapper for typed unit-aware arrays.
+ * Fits Antoine coefficients using typed, unit-aware datasets.
+ *
+ * Temperatures and pressures are normalized to Kelvin and Pascal and then
+ * passed to the canonical fitting function. This API throws if normalization
+ * fails, making it suitable for strict-callers that prefer explicit errors.
+ *
+ * @param temperatures - Experimental temperatures with declared units.
+ * @param pressures - Experimental pressures with declared units.
+ * @param options - Optional fitting controls and robust-loss settings.
+ * @returns Canonical fit result from the core Antoine solver.
+ * @throws Error When typed arrays cannot be normalized to canonical units.
  */
 export function fitAntoine(temperatures: Temperature[], pressures: Pressure[], options: EstimateOptions = {}) {
   const tK = normalizeTemperatures(temperatures);
