@@ -38,8 +38,8 @@
     "pack:make": "npm pack"
   },
   "dependencies": {
-    "mozicuc": "^1.1.0",
-    "mozithermodb-settings": "^1.0.0"
+    "mozicuc": "^1.1.1",
+    "mozithermodb-settings": "^1.1.4"
   },
   "devDependencies": {
     "@rollup/plugin-node-resolve": "^15.3.0",
