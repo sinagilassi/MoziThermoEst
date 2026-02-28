@@ -65,3 +65,6 @@ py-pkg/
 
 # private
 private/
+
+# tgz
+*.tgz
