@@ -15,6 +15,6 @@
     "license": "ISC",
     "type": "commonjs",
     "dependencies": {
-        "mozithermoest": "file:../../mozithermoest-0.1.0.tgz"
+        "mozithermoest": "file:../../mozithermoest-0.1.1.tgz"
     }
 }
