@@ -1,21 +1,12 @@
-import * as mozicuc from "mozicuc";
+import { convertFromTo } from "mozicuc";
 import type { Pressure, Temperature } from "mozithermodb-settings";
+// ! LOCALS
 import type {
   PressureUnit,
   RegressionPressureUnit,
   RegressionTemperatureUnit,
   TemperatureUnit,
-} from "../types/antoine";
-
-const convertFromToFn: (value: number, fromUnit: string, toUnit: string) => number = (() => {
-  const mod = mozicuc as unknown as {
-    convertFromTo?: (value: number, fromUnit: string, toUnit: string) => number;
-    default?: { convertFromTo?: (value: number, fromUnit: string, toUnit: string) => number };
-  };
-  if (typeof mod.convertFromTo === "function") return mod.convertFromTo;
-  if (typeof mod.default?.convertFromTo === "function") return mod.default.convertFromTo;
-  throw new Error("mozicuc.convertFromTo is not available");
-})();
+} from "@/types/antoine";
 
 /**
  * Convert a numeric value from one unit string to another.
@@ -25,7 +16,7 @@ const convertFromToFn: (value: number, fromUnit: string, toUnit: string) => numb
  * @returns Converted value.
  */
 export function convertUnit(value: number, fromUnit: string, toUnit: string): number {
-  return convertFromToFn(value, fromUnit, toUnit);
+  return convertFromTo(value, fromUnit, toUnit);
 }
 
 /**
@@ -34,7 +25,7 @@ export function convertUnit(value: number, fromUnit: string, toUnit: string): nu
  * @returns Temperature in Kelvin.
  */
 export function toKelvin(temperature: Temperature): number {
-  return convertFromToFn(temperature.value, temperature.unit, "K");
+  return convertFromTo(temperature.value, temperature.unit, "K");
 }
 
 /**
@@ -44,7 +35,7 @@ export function toKelvin(temperature: Temperature): number {
  * @returns Temperature in Kelvin.
  */
 export function toKelvinValue(value: number, unit: TemperatureUnit): number {
-  return convertFromToFn(value, unit, "K");
+  return convertFromTo(value, unit, "K");
 }
 
 /**
@@ -53,7 +44,7 @@ export function toKelvinValue(value: number, unit: TemperatureUnit): number {
  * @returns Pressure in Pascal.
  */
 export function toPascal(pressure: Pressure): number {
-  return convertFromToFn(pressure.value, pressure.unit, "Pa");
+  return convertFromTo(pressure.value, pressure.unit, "Pa");
 }
 
 /**
@@ -63,7 +54,7 @@ export function toPascal(pressure: Pressure): number {
  * @returns Pressure in Pascal.
  */
 export function toPa(value: number, unit: PressureUnit): number {
-  return convertFromToFn(value, unit, "Pa");
+  return convertFromTo(value, unit, "Pa");
 }
 
 /**
@@ -73,7 +64,7 @@ export function toPa(value: number, unit: PressureUnit): number {
  * @returns Converted pressure.
  */
 export function fromPascal(value: number, unit: PressureUnit): number {
-  return convertFromToFn(value, "Pa", unit);
+  return convertFromTo(value, "Pa", unit);
 }
 
 /**
@@ -134,7 +125,7 @@ export function normalizeUnit<T extends UnitValue>(
     if (allowedUnits && !allowedUnits.includes(item.unit)) {
       throw new Error(`${label} unit '${item.unit}' is not supported.`);
     }
-    out.push(convertFromToFn(item.value, item.unit, targetUnit));
+    out.push(convertFromTo(item.value, item.unit, targetUnit));
   }
   return out;
 }
