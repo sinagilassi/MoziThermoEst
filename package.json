@@ -26,15 +26,6 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.mjs",
       "require": "./dist/index.cjs"
-    },
-    "./node": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.mjs",
-      "require": "./dist/index.cjs"
-    },
-    "./browser": {
-      "types": "./dist/index.browser.d.ts",
-      "import": "./dist/index.browser.mjs"
     }
   },
   "files": [
