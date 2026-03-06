@@ -1,6 +1,3 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
 import {
   Antoine,
@@ -8,7 +5,7 @@ import {
   calcVaporPressure,
   calcVaporPressureWithUnits,
   fitAntoine,
-  loadExperimentalData,
+  loadExperimentalDataFromCsvText,
 } from "./antoine";
 
 const temperaturesK = [298, 308, 318, 328, 338, 348, 358, 368, 378, 388];
@@ -57,12 +54,19 @@ describe("Antoine canonical API", () => {
     expect(Number.isFinite(pLn.vapor_pressure_Pa)).toBe(true);
   });
 
-  it("throws for CSV files missing Temperature/Pressure headers", () => {
-    const dir = mkdtempSync(join(tmpdir(), "antoine-test-"));
-    const badCsv = join(dir, "bad.csv");
-    writeFileSync(badCsv, "T,P\n300,1000\n");
-    expect(() => loadExperimentalData(badCsv, "K", "Pa")).toThrow(AntoineError);
-    rmSync(dir, { recursive: true, force: true });
+  it("throws for CSV data missing Temperature/Pressure headers", () => {
+    expect(() => loadExperimentalDataFromCsvText("T,P\n300,1000\n", "K", "Pa")).toThrow(AntoineError);
+  });
+
+  it("loads valid CSV text through canonical and compatibility APIs", () => {
+    const csvText = "Temperature,Pressure\n300,1000\n310,1300\n320,1700\n";
+    const canonical = loadExperimentalDataFromCsvText(csvText, "K", "Pa");
+    expect(canonical.temperaturesK).toEqual([300, 310, 320]);
+    expect(canonical.pressuresPa).toEqual([1000, 1300, 1700]);
+
+    const compat = Antoine.loadExperimentalDataFromCsvText(csvText, "K", "Pa");
+    expect(compat.temperaturesK).toEqual([300, 310, 320]);
+    expect(compat.pressuresPa).toEqual([1000, 1300, 1700]);
   });
 
   it("returns converted units from calcVaporPressureWithUnits", () => {

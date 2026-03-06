@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import type { Pressure, Temperature } from "mozithermodb-settings";
 import { invert3x3, leastSquares, transposeMulSelf, type Vector3 } from "../solvers/leastSquares";
 import { robustWeight } from "../solvers/robust";
@@ -504,19 +503,18 @@ export function calcVaporPressureWithUnits(
  * CSV input must include `Temperature` and `Pressure` headers. Parsed values
  * are converted to Kelvin and Pascal and validated for fitting suitability.
  *
- * @param experimentalDataPath - Path to CSV input file.
+ * @param csvText - CSV document text.
  * @param temperatureUnit - Unit of temperature values in the CSV.
  * @param pressureUnit - Unit of pressure values in the CSV.
  * @returns Canonical arrays `{ temperaturesK, pressuresPa }`.
  * @throws AntoineError When file format, parsing, or numeric validation fails.
  */
-export function loadExperimentalData(
-  experimentalDataPath: string,
+export function loadExperimentalDataFromCsvText(
+  csvText: string,
   temperatureUnit: TemperatureUnit,
   pressureUnit: PressureUnit,
 ): { temperaturesK: number[]; pressuresPa: number[] } {
-  const raw = readFileSync(experimentalDataPath, "utf8");
-  const lines = raw
+  const lines = csvText
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter((line) => line.length > 0);
@@ -683,20 +681,20 @@ export class Antoine {
   }
 
   /**
-   * Legacy-safe CSV loader that returns empty arrays instead of throwing.
+   * Legacy-safe CSV text loader that returns empty arrays instead of throwing.
    *
-   * @param experimentalDataPath - Path to CSV input file.
+   * @param csvText - CSV document text.
    * @param TUnit - Unit of temperature values in the CSV.
    * @param PUnit - Unit of pressure values in the CSV.
    * @returns Canonical arrays on success, otherwise empty arrays.
    */
-  static loadExperimentalData(
-    experimentalDataPath: string,
+  static loadExperimentalDataFromCsvText(
+    csvText: string,
     TUnit: TemperatureUnit,
     PUnit: PressureUnit,
   ): { temperaturesK: number[]; pressuresPa: number[] } {
     try {
-      return loadExperimentalData(experimentalDataPath, TUnit, PUnit);
+      return loadExperimentalDataFromCsvText(csvText, TUnit, PUnit);
     } catch {
       return { temperaturesK: [], pressuresPa: [] };
     }

@@ -81,7 +81,8 @@ if (result.heat_capacity.value) {
 - `fitAntoine(TDataK, PDataPa, options)`
 - `calcVaporPressure(temperature, A, B, C, base?)`
 - `calcVaporPressureWithUnits(temperature, A, B, C, pressureUnit?, base?)`
-- `loadExperimentalData(csvPath, temperatureUnit, pressureUnit)`
+- `loadExperimentalDataFromCsvText(csvText, temperatureUnit, pressureUnit)` (cross-platform)
+- `loadExperimentalData(csvPath, temperatureUnit, pressureUnit)` (Node.js runtime)
 - `AntoineError`
 
 ### Antoine (compatibility wrappers)
@@ -93,7 +94,8 @@ if (result.heat_capacity.value) {
   - `Antoine.fitAntoine(...)`
   - `Antoine.outlierReport(...)`
   - `Antoine.calc(...)`
-  - `Antoine.loadExperimentalData(...)`
+  - `Antoine.loadExperimentalDataFromCsvText(...)`
+  - `Antoine.loadExperimentalData(...)` (Node.js runtime)
 
 ### Joback (canonical)
 

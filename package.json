@@ -1,6 +1,6 @@
 {
   "name": "mozithermoest",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "MoziThermoEst is a toolkit for estimating thermodynamic properties.",
   "homepage": "https://github.com/sinagilassi/MoziThermoEst#readme",
   "bugs": {
@@ -19,10 +19,22 @@
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
+      "browser": {
+        "types": "./dist/index.browser.d.ts",
+        "import": "./dist/index.browser.mjs"
+      },
       "types": "./dist/index.d.ts",
-      "browser": "./dist/index.browser.mjs",
       "import": "./dist/index.mjs",
       "require": "./dist/index.cjs"
+    },
+    "./node": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
+    },
+    "./browser": {
+      "types": "./dist/index.browser.d.ts",
+      "import": "./dist/index.browser.mjs"
     }
   },
   "files": [

@@ -6,7 +6,7 @@ import {
   calcVaporPressure as calcVaporPressureCanonical,
   calcVaporPressureWithUnits as calcVaporPressureWithUnitsCanonical,
   fitAntoine as fitAntoineCanonical,
-  loadExperimentalData,
+  loadExperimentalDataFromCsvText,
 } from "@/core/antoine";
 import type {
   AntoineFitResultCompat,
@@ -121,7 +121,7 @@ export function estimateCoefficientsFromExperimentalData(
   // SECTION: Load, normalize, and fit
   try {
     // NOTE: load data
-    const loaded = loadExperimentalData(experimentalData, temperatureUnit, pressureUnit);
+    const loaded = loadExperimentalDataFromCsvText(experimentalData, temperatureUnit, pressureUnit);
 
     // NOTE: fitting with the canonical routine, which expects Kelvin and Pascal
     const compat = Antoine.fitAntoine(loaded.temperaturesK, loaded.pressuresPa, {
