@@ -70,3 +70,5 @@ export {
   joback_heat_capacity_calc,
   joback_prop_calc,
 } from "./docs/joback";
+// NOTE: Utils
+export * from "./utils";
