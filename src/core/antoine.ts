@@ -3,6 +3,7 @@ import { invert3x3, leastSquares, transposeMulSelf, type Vector3 } from "../solv
 import { robustWeight } from "../solvers/robust";
 import type {
   AntoineBase,
+  ExperimentalDataset,
   AntoineFitReport,
   AntoineFitResultCompat,
   AntoineLoss,
@@ -551,6 +552,24 @@ export function loadExperimentalDataFromCsvText(
 }
 
 /**
+ * Validates and normalizes canonical experimental dataset object input.
+ *
+ * @param dataset - Experimental dataset in canonical SI units.
+ * @returns Canonical arrays `{ temperaturesK, pressuresPa }`.
+ * @throws AntoineError When shape or numeric constraints are invalid.
+ */
+export function loadExperimentalData(dataset: ExperimentalDataset): { temperaturesK: number[]; pressuresPa: number[] } {
+  if (!dataset || !Array.isArray(dataset.temperaturesK) || !Array.isArray(dataset.pressuresPa)) {
+    throw new AntoineError("Experimental dataset must include temperaturesK and pressuresPa arrays.");
+  }
+
+  const temperaturesK = [...dataset.temperaturesK];
+  const pressuresPa = [...dataset.pressuresPa];
+  validateCanonicalInputs(temperaturesK, pressuresPa);
+  return { temperaturesK, pressuresPa };
+}
+
+/**
  * Compatibility class facade for legacy API consumers.
  *
  * Static methods in this class preserve old calling conventions and return
@@ -695,6 +714,20 @@ export class Antoine {
   ): { temperaturesK: number[]; pressuresPa: number[] } {
     try {
       return loadExperimentalDataFromCsvText(csvText, TUnit, PUnit);
+    } catch {
+      return { temperaturesK: [], pressuresPa: [] };
+    }
+  }
+
+  /**
+   * Legacy-safe experimental dataset loader.
+   *
+   * @param dataset - Experimental dataset in canonical SI units.
+   * @returns Canonical arrays on success, otherwise empty arrays.
+   */
+  static loadExperimentalData(dataset: ExperimentalDataset): { temperaturesK: number[]; pressuresPa: number[] } {
+    try {
+      return loadExperimentalData(dataset);
     } catch {
       return { temperaturesK: [], pressuresPa: [] };
     }

@@ -6,13 +6,13 @@ import {
   calcVaporPressure as calcVaporPressureCanonical,
   calcVaporPressureWithUnits as calcVaporPressureWithUnitsCanonical,
   fitAntoine as fitAntoineCanonical,
-  loadExperimentalDataFromCsvText,
 } from "@/core/antoine";
 import type {
   AntoineFitResultCompat,
   CalcVaporPressureOptions,
-  EstimateFromFileOptions,
+  EstimateFromDatasetOptions,
   EstimateOptions,
+  ExperimentalDataset,
 } from "@/types/antoine";
 import { fromPascal, normalizePressures, normalizeTemperatures } from "@/utils/units";
 import { isFiniteNumber } from "@/utils/tools";
@@ -98,30 +98,23 @@ export function estimateCoefficients(
 }
 
 /**
- * Estimates Antoine coefficients from serialized experimental data.
+ * Estimates Antoine coefficients from canonical experimental dataset object.
  *
- * The input payload is parsed with the configured source units, converted to
- * canonical SI units, and then fitted by the core Antoine routine. Exceptions
- * from parsing, conversion, or fitting are swallowed to preserve the legacy
- * contract of returning `null` on failure.
+ * The dataset is validated as canonical SI units and then fitted by the core
+ * Antoine routine. Exceptions are swallowed to preserve the legacy contract of
+ * returning `null` on failure.
  *
- * @param experimentalData - Serialized experimental dataset (for example CSV text).
- * @param options - Data-loading units and optional fitting configuration.
+ * @param experimentalData - Canonical SI dataset object.
+ * @param options - Optional fitting configuration.
  * @returns A compatibility fit report on success, otherwise `null`.
  */
 export function estimateCoefficientsFromExperimentalData(
-  experimentalData: string,
-  options: EstimateFromFileOptions = {},
+  experimentalData: ExperimentalDataset,
+  options: EstimateFromDatasetOptions = {},
 ): AntoineFitResultCompat | null {
-  // SECTION: Determine source units with defaults
-  // NOTE: default to Kelvin for temperature and Pascal for pressure if not provided
-  const temperatureUnit = options.temperatureUnit ?? "K";
-  const pressureUnit = options.pressureUnit ?? "Pa";
-
   // SECTION: Load, normalize, and fit
   try {
-    // NOTE: load data
-    const loaded = loadExperimentalDataFromCsvText(experimentalData, temperatureUnit, pressureUnit);
+    const loaded = Antoine.loadExperimentalData(experimentalData);
 
     // NOTE: fitting with the canonical routine, which expects Kelvin and Pascal
     const compat = Antoine.fitAntoine(loaded.temperaturesK, loaded.pressuresPa, {
@@ -144,6 +137,20 @@ export function estimateCoefficientsFromExperimentalData(
   } catch {
     return null;
   }
+}
+
+/**
+ * Estimates Antoine coefficients from canonical experimental dataset object.
+ *
+ * @param dataset - Canonical SI dataset object containing temperatures and pressures.
+ * @param options - Optional fitting configuration.
+ * @returns A compatibility fit report on success, otherwise `null`.
+ */
+export function estimateCoefficientsFromDataset(
+  dataset: ExperimentalDataset,
+  options: EstimateFromDatasetOptions = {},
+): AntoineFitResultCompat | null {
+  return estimateCoefficientsFromExperimentalData(dataset, options);
 }
 
 /**

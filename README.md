@@ -81,21 +81,22 @@ if (result.heat_capacity.value) {
 - `fitAntoine(TDataK, PDataPa, options)`
 - `calcVaporPressure(temperature, A, B, C, base?)`
 - `calcVaporPressureWithUnits(temperature, A, B, C, pressureUnit?, base?)`
+- `loadExperimentalData(dataset)` where `dataset = { temperaturesK, pressuresPa }`
 - `loadExperimentalDataFromCsvText(csvText, temperatureUnit, pressureUnit)` (cross-platform)
-- `loadExperimentalData(csvPath, temperatureUnit, pressureUnit)` (Node.js runtime)
 - `AntoineError`
 
 ### Antoine (compatibility wrappers)
 
 - `estimateCoefficients(temperatures, pressures, options)` -> nullable result
-- `estimateCoefficientsFromExperimentalData(path, options)` -> nullable result
+- `estimateCoefficientsFromExperimentalData(dataset, options)` -> nullable result
+- `estimateCoefficientsFromDataset(dataset, options)` -> nullable result
 - `calcVaporPressure(...)` / `calcVaporPressureWithUnits(...)` (legacy aliases exported too)
 - `Antoine` class (legacy facade):
   - `Antoine.fitAntoine(...)`
   - `Antoine.outlierReport(...)`
   - `Antoine.calc(...)`
+  - `Antoine.loadExperimentalData(dataset)`
   - `Antoine.loadExperimentalDataFromCsvText(...)`
-  - `Antoine.loadExperimentalData(...)` (Node.js runtime)
 
 ### Joback (canonical)
 
@@ -137,7 +138,7 @@ npx tsx examples/joback-exp-3.ts
 
 Notes:
 
-- `examples/exp-1.ts` includes a CSV-path demo that points to an external local path; update that path before running that section.
+- `examples/exp-1.ts` data-loading flows should provide canonical objects (`{ temperaturesK, pressuresPa }`) or CSV text.
 - Joback examples show alias-keyed and field-name-keyed group payloads.
 
 ## 📄 License

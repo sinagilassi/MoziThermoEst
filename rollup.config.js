@@ -58,7 +58,7 @@ const baseOutput = {
 
 export default [
     {
-        input: "src/index.node.ts",
+        input: "src/index.ts",
         external: isExternal,
         onwarn,
         plugins: jsPlugins,
@@ -79,42 +79,27 @@ export default [
                 format: "cjs",
                 exports: "named",
             },
+            {
+                ...baseOutput,
+                file: "dist/index.browser.mjs",
+                format: "es",
+            },
         ],
     },
     {
-        input: "src/index.browser.ts",
-        external: isExternal,
-        onwarn,
-        plugins: jsPlugins,
-        treeshake: {
-            moduleSideEffects: false,
-            propertyReadSideEffects: false,
-            tryCatchDeoptimization: false,
-        },
-        output: {
-            ...baseOutput,
-            file: "dist/index.browser.mjs",
-            format: "es",
-        },
-    },
-    {
-        input: "src/index.node.ts",
+        input: "src/index.ts",
         external: isExternal,
         onwarn,
         plugins: [tsconfigPaths(), dts({ tsconfig: "./tsconfig.json" })],
-        output: {
-            file: "dist/index.d.ts",
-            format: "es",
-        },
-    },
-    {
-        input: "src/index.browser.ts",
-        external: isExternal,
-        onwarn,
-        plugins: [tsconfigPaths(), dts({ tsconfig: "./tsconfig.json" })],
-        output: {
-            file: "dist/index.browser.d.ts",
-            format: "es",
-        },
+        output: [
+            {
+                file: "dist/index.d.ts",
+                format: "es",
+            },
+            {
+                file: "dist/index.browser.d.ts",
+                format: "es",
+            },
+        ],
     },
 ];

@@ -107,10 +107,7 @@ export interface EstimateOptions {
   metadata?: CustomProp[];
 }
 
-export interface EstimateFromFileOptions extends EstimateOptions {
-  temperatureUnit?: TemperatureUnit;
-  pressureUnit?: PressureUnit;
-}
+export type EstimateFromDatasetOptions = EstimateOptions;
 
 export interface CalcVaporPressureOptions {
   base?: AntoineBase;

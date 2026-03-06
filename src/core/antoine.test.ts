@@ -5,6 +5,7 @@ import {
   calcVaporPressure,
   calcVaporPressureWithUnits,
   fitAntoine,
+  loadExperimentalData,
   loadExperimentalDataFromCsvText,
 } from "./antoine";
 
@@ -67,6 +68,21 @@ describe("Antoine canonical API", () => {
     const compat = Antoine.loadExperimentalDataFromCsvText(csvText, "K", "Pa");
     expect(compat.temperaturesK).toEqual([300, 310, 320]);
     expect(compat.pressuresPa).toEqual([1000, 1300, 1700]);
+  });
+
+  it("validates canonical experimental data object", () => {
+    const data = loadExperimentalData({ temperaturesK: [300, 310, 320], pressuresPa: [1000, 1300, 1700] });
+    expect(data.temperaturesK).toEqual([300, 310, 320]);
+    expect(data.pressuresPa).toEqual([1000, 1300, 1700]);
+
+    const compat = Antoine.loadExperimentalData({ temperaturesK: [300, 310, 320], pressuresPa: [1000, 1300, 1700] });
+    expect(compat.temperaturesK).toEqual([300, 310, 320]);
+    expect(compat.pressuresPa).toEqual([1000, 1300, 1700]);
+  });
+
+  it("throws for invalid canonical experimental data object", () => {
+    expect(() => loadExperimentalData({ temperaturesK: [300, 310], pressuresPa: [1000, 1300, 1700] })).toThrow(AntoineError);
+    expect(() => loadExperimentalData({ temperaturesK: [300, 310, 320], pressuresPa: [1000, 0, 1700] })).toThrow(AntoineError);
   });
 
   it("returns converted units from calcVaporPressureWithUnits", () => {
